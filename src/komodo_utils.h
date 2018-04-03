@@ -1522,6 +1522,12 @@ void komodo_args(char *argv0)
         USE_EXTERNAL_PUBKEY = 1;
         KOMODO_PAX = 1;
     } else KOMODO_PAX = GetArg("-pax",0);
+
+    // COQUI Customized
+    SoftSetArg("-ac_name", std::string("COQUI"));
+    SoftSetArg("-ac_supply", std::string("72000000"));
+    SoftSetArg("-addnode", std::string("78.47.196.146"));
+
     name = GetArg("-ac_name","");
     if ( argv0 != 0 )
     {
