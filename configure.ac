@@ -584,7 +584,8 @@ fi
 if test x$use_boost = xyes; then
 
 dnl Check for boost libs
-AX_BOOST_BASE
+dnl We need Boost >= 1.62 to fix a potential security bug (https://github.com/zcash/zcash/issues/1241)
+AX_BOOST_BASE([1.62])
 AX_BOOST_SYSTEM
 AX_BOOST_FILESYSTEM
 AX_BOOST_PROGRAM_OPTIONS
@@ -831,7 +832,7 @@ if test x$enable_rust != xno; then
   RUST_LIBS="-lrustzcash"
 fi
 
-#LIBZCASH_LIBS="-lsnark -lgmp -lgmpxx -lboost_system-mt -lcrypto -lsodium -fopenmp $RUST_LIBS"
+#LIBZCASH_LIBS="-lsnark -lgmp -lgmpxx -lboost_system -lcrypto -lsodium -fopenmp $RUST_LIBS"
 
 dnl Check for OpenMP support
 AX_OPENMP(
