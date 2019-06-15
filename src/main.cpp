@@ -3,6 +3,21 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+/******************************************************************************
+ * Copyright © 2014-2019 The SuperNET Developers.                             *
+ *                                                                            *
+ * See the AUTHORS, DEVELOPER-AGREEMENT and LICENSE files at                  *
+ * the top-level directory of this distribution for the individual copyright  *
+ * holder information and the developer policies on copyright and licensing.  *
+ *                                                                            *
+ * Unless otherwise agreed in a custom licensing agreement, no part of the    *
+ * SuperNET software, including this file may be copied, modified, propagated *
+ * or distributed except according to the terms contained in the LICENSE file *
+ *                                                                            *
+ * Removal or modification of this copyright notice is prohibited.            *
+ *                                                                            *
+ ******************************************************************************/
+
 #include "main.h"
 
 #include "sodium.h"
@@ -1241,25 +1256,24 @@ bool CheckTransaction(uint32_t tiptime,const CTransaction& tx, CValidationState 
     }
 }
 
-int32_t komodo_isnotaryvout(char *coinaddr) // from ac_private chains only
+int32_t komodo_isnotaryvout(char *coinaddr,uint32_t tiptime) // from ac_private chains only
 {
-    static int32_t didinit; static char notaryaddrs[sizeof(Notaries_elected1)/sizeof(*Notaries_elected1) + 1][64];
-    int32_t i;
-    if ( didinit == 0 )
+    int32_t season = getacseason(tiptime);
+    if ( NOTARY_ADDRESSES[season-1][0][0] == 0 )
     {
-        uint8_t pubkey33[33];
-        for (i=0; i<=sizeof(Notaries_elected1)/sizeof(*Notaries_elected1); i++)
-        {
-            if ( i < sizeof(Notaries_elected1)/sizeof(*Notaries_elected1) )
-                decode_hex(pubkey33,33,(char *)Notaries_elected1[i][1]);
-            else decode_hex(pubkey33,33,(char *)CRYPTO777_PUBSECPSTR);
-            pubkey2addr((char *)notaryaddrs[i],(uint8_t *)pubkey33);
-        }
-        didinit = 1;
+        uint8_t pubkeys[64][33];
+        komodo_notaries(pubkeys,0,tiptime);
     }
-    for (i=0; i<=sizeof(Notaries_elected1)/sizeof(*Notaries_elected1); i++)
-        if ( strcmp(coinaddr,notaryaddrs[i]) == 0 )
+    if ( strcmp(coinaddr,CRYPTO777_KMDADDR) == 0 )
+        return(1);
+    for (int32_t i = 0; i < NUM_KMD_NOTARIES; i++) 
+    {
+        if ( strcmp(coinaddr,NOTARY_ADDRESSES[season-1][i]) == 0 )
+        {
+            //fprintf(stderr, "coinaddr.%s notaryaddress[%i].%s\n",coinaddr,i,NOTARY_ADDRESSES[season-1][i]);
             return(1);
+        }
+    }
     return(0);
 }
 
@@ -1313,9 +1327,10 @@ bool CheckTransactionWithoutProofVerification(uint32_t tiptime,const CTransactio
 
     // Transactions containing empty `vin` must have either non-empty
     // `vjoinsplit` or non-empty `vShieldedSpend`.
-    if (tx.vin.empty() && tx.vjoinsplit.empty() && tx.vShieldedSpend.empty())
+    if (tx.vin.empty() && tx.vjoinsplit.empty() && tx.vShieldedSpend.empty()) 
         return state.DoS(10, error("CheckTransaction(): vin empty"),
                          REJECT_INVALID, "bad-txns-vin-empty");
+
     // Transactions containing empty `vout` must have either non-empty
     // `vjoinsplit` or non-empty `vShieldedOutput`.
     if (tx.vout.empty() && tx.vjoinsplit.empty() && tx.vShieldedOutput.empty())
@@ -1351,7 +1366,7 @@ bool CheckTransactionWithoutProofVerification(uint32_t tiptime,const CTransactio
                 //
                 char destaddr[65];
                 Getscriptaddress(destaddr,txout.scriptPubKey);
-                if ( komodo_isnotaryvout(destaddr) == 0 )
+                if ( komodo_isnotaryvout(destaddr,tiptime) == 0 )
                 {
                     invalid_private_taddr = 1;
                     //return state.DoS(100, error("CheckTransaction(): this is a private chain, no public allowed"),REJECT_INVALID, "bad-txns-acprivacy-chain");
@@ -1359,7 +1374,7 @@ bool CheckTransactionWithoutProofVerification(uint32_t tiptime,const CTransactio
             }
         }
         if ( txout.scriptPubKey.size() > IGUANA_MAXSCRIPTSIZE )
-            return state.DoS(100, error("CheckTransaction(): txout.scriptPubKey.size() too big"),REJECT_INVALID, "bad-txns-vout-negative");
+            return state.DoS(100, error("CheckTransaction(): txout.scriptPubKey.size() too big"),REJECT_INVALID, "bad-txns-opret-too-big");
         nValueOut += txout.nValue;
         if (!MoneyRange(nValueOut))
             return state.DoS(100, error("CheckTransaction(): txout total out of range"),

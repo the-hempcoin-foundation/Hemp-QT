@@ -1655,8 +1655,7 @@ extern int64_t MAX_MONEY;
 
 void komodo_args(char *argv0)
 {
-    extern const char *Notaries_elected1[][2];
-    std::string name,addn; char *dirname,fname[512],arg0str[64],magicstr[9]; uint8_t magic[4],extrabuf[8192],*extraptr=0; FILE *fp; uint64_t val; uint16_t port; int32_t i,baseid,len,n,extralen = 0;
+    std::string name,addn,hexstr,symbol; char *dirname,fname[512],arg0str[64],magicstr[9]; uint8_t magic[4],extrabuf[32756],disablebits[32],*extraptr=0; FILE *fp; uint64_t val; uint16_t port; int32_t i,nonz=0,baseid,len,n,extralen = 0; uint64_t ccenables[256], ccEnablesHeight[512];
     IS_KOMODO_NOTARY = GetBoolArg("-notary", false);
 
     if ( GetBoolArg("-gen", false) != 0 )
@@ -1672,16 +1671,20 @@ void komodo_args(char *argv0)
     KOMODO_DEALERNODE = GetArg("-dealer",0);
     if ( strlen(NOTARY_PUBKEY.c_str()) == 66 )
     {
+        decode_hex(NOTARY_PUBKEY33,33,(char *)NOTARY_PUBKEY.c_str());
         USE_EXTERNAL_PUBKEY = 1;
         if ( IS_KOMODO_NOTARY == 0 )
         {
+            // We dont have any chain data yet, so use system clock to guess. 
+            // I think on season change should reccomend notaries to use -notary to avoid needing this. 
+            int32_t kmd_season = getacseason(time(NULL));
             for (i=0; i<64; i++)
-                if ( strcmp(NOTARY_PUBKEY.c_str(),Notaries_elected1[i][1]) == 0 )
+                if ( strcmp(NOTARY_PUBKEY.c_str(),notaries_elected[kmd_season][NUM_KMD_NOTARIES][1]) == 0 )
                 {
                     IS_KOMODO_NOTARY = 1;
                     KOMODO_MININGTHREADS = 1;
                     mapArgs ["-genproclimit"] = itostr(KOMODO_MININGTHREADS);
-                    LogPrintf("running as notary.%d %s\n",i,Notaries_elected1[i][0]);
+                    LogPrintf("running as notary.%d %s\n",i,notaries_elected[kmd_season][NUM_KMD_NOTARIES][0]);
                     break;
                 }
         }
