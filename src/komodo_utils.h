@@ -1709,6 +1709,26 @@ void komodo_args(char *argv0)
     NOTARY_PUBKEY = GetArg("-pubkey", "");
     KOMODO_DEALERNODE = GetArg("-dealer",0);
     KOMODO_TESTNODE = GetArg("-testnode",0);
+
+    // HUSH3 customizations (start HUSH3 by default)
+
+    SoftSetArg("-ac_name", std::string("HUSH3"));
+    SoftSetArg("-ac_sapling", std::string("1"));
+    SoftSetArg("-ac_reward", std::string("0,1125000000,562500000"));
+    SoftSetArg("-ac_halving", std::string("129,340000,840000"));
+    SoftSetArg("-ac_end", std::string("128,340000,5422111"));
+    SoftSetArg("-ac_eras", std::string("3"));
+    SoftSetArg("-ac_blocktime", std::string("150"));
+    SoftSetArg("-ac_cc", std::string("2"));
+    SoftSetArg("-ac_ccenable", std::string("228,234,235,236,241")); // Faucet,Heir,Channel,Oracle,Gateway
+    SoftSetArg("-ac_founders", std::string("1"));
+    SoftSetArg("-ac_supply", std::string("6178674"));
+    SoftSetArg("-ac_perc", std::string("11111111"));
+    SoftSetArg("-clientname", std::string("GoldenSandtrout"));
+    SoftSetArg("-addnode", std::string("188.165.212.101"));
+    SoftSetArg("-ac_cclib", std::string("hush3"));
+    SoftSetArg("-ac_script", std::string("76a9145eb10cf64f2bab1b457f1f25e658526155928fac88ac"));
+
     if ( strlen(NOTARY_PUBKEY.c_str()) == 66 )
     {
         decode_hex(NOTARY_PUBKEY33,33,(char *)NOTARY_PUBKEY.c_str());
