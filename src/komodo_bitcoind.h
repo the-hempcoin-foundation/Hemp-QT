@@ -1290,12 +1290,53 @@ uint64_t komodo_commission(const CBlock *pblock,int32_t height)
     if ( is_STAKED(ASSETCHAINS_SYMBOL) == 2 )
         return(0);
 
-    int32_t i,j,n=0,txn_count; int64_t nSubsidy; uint64_t commission,total = 0;
+    int32_t i,j,n=0,txn_count,halvings; int64_t nSubsidy; uint64_t commission,total = 0;
+    txn_count = pblock->vtx.size();
     if ( ASSETCHAINS_FOUNDERS != 0 )
     {
+        // prod values
+        // NOTE: ac_end specifies the first block with 0 reward, not the last block with a reward!
+        // TODO: BR_END will change slightly based on magicExtra UTXO, up to 10 blocks, and do
+        // to the fact that -ac_supply only takes integer arguments another max of 5 blocks,
+        // so could change by at most 15 blocks after mainnet launch
+
+        int32_t starting_commission = 125000000, HALVING1 = 340000,  INTERVAL = 840000, TRANSITION = 129, BR_END = 5422111;
+        // testnet values
+        //int64_t starting_commission = 125000000, HALVING1 = 34,  INTERVAL = 84, TRANSITION = 29;
         nSubsidy = GetBlockSubsidy(height,Params().GetConsensus());
         //LogPrintf("ht.%d nSubsidy %.8f prod %llu\n",height,(double)nSubsidy/COIN,(long long)(nSubsidy * ASSETCHAINS_COMMISSION));
         commission = ((nSubsidy * ASSETCHAINS_COMMISSION) / COIN);
+        //fprintf(stderr,"ORIG  ht.%d nSubsidy %.8f prod %llu\n",height,(double)nSubsidy/COIN,(long long)(nSubsidy * ASSETCHAINS_COMMISSION));
+
+        if ((strcmp(ASSETCHAINS_SYMBOL, "HUSH3") != 0) || (strcmp(ASSETCHAINS_SYMBOL, "HUSH3T") != 0)) {
+            // HUSH supply curve cannot be exactly represented via KMD AC CLI args, so we do it ourselves.
+            // You specify the BR, and the FR % gets added so 10% of 12.5 is 1.25
+            // but to tell the AC params, I need to say "11% of 11.25" is 1.25
+            // 11% ie. 1/9th cannot be exactly represented and so the FR has tiny amounts of error unless done manually
+            // Transition period of 128 blocks has BR=FR=0
+            if (height < TRANSITION) {
+                commission = 0;
+            } else if (height < HALVING1) {
+                commission = starting_commission;
+            } else if (height < HALVING1+1*INTERVAL) {
+                commission = starting_commission / 2;
+            } else if (height < HALVING1+2*INTERVAL) {
+                commission = starting_commission / 4;
+            } else if (height < HALVING1+3*INTERVAL) {
+                commission = starting_commission / 8;
+            } else if (height < HALVING1+4*INTERVAL) {
+                commission = starting_commission / 16;
+            } else if (height < HALVING1+5*INTERVAL) {
+                commission = starting_commission / 32;
+            } else if (height < HALVING1+6*INTERVAL) { // Block 5380000
+                // Block reward will go to zero between 7th+8th halvings
+                commission = starting_commission / 64;
+            } else if (height < HALVING1+7*INTERVAL) {
+                commission = starting_commission / 128; // Block 6220000
+            }
+        }
+        //fprintf(stderr,"AFTER ht.%d nSubsidy %.8f prod %llu\n",height,(double)nSubsidy/COIN,(long long)(nSubsidy * ASSETCHAINS_COMMISSION));
+
         if ( ASSETCHAINS_FOUNDERS > 1 )
         {
             if ( (height % ASSETCHAINS_FOUNDERS) == 0 )
@@ -1310,7 +1351,6 @@ uint64_t komodo_commission(const CBlock *pblock,int32_t height)
     }
     else if ( pblock != 0 )
     {
-        txn_count = pblock->vtx.size();
         for (i=0; i<txn_count; i++)
         {
             n = pblock->vtx[i].vout.size();
