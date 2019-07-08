@@ -86,7 +86,10 @@ PlatformStyle::PlatformStyle(const QString &_name, bool _imagesOnButtons, bool _
         const QColor colorHighlightFg(QApplication::palette().color(QPalette::HighlightedText));
         const QColor colorText(QApplication::palette().color(QPalette::WindowText));
         const int colorTextLightness = colorText.lightness();
-        QColor colorbase = QColor(0, 94, 94); // Komodo Color
+        
+        //QColor colorbase = QColor(0, 94, 94); // Komodo Color
+        
+        QColor colorbase = QColor(45, 45, 45); // Hush3 Native Color
 
         /*if (abs(colorHighlightBg.lightness() - colorTextLightness) < abs(colorHighlightFg.lightness() - colorTextLightness))
             colorbase = colorHighlightBg;
