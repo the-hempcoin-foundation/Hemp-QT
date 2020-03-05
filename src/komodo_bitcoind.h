@@ -1940,7 +1940,7 @@ int32_t komodo_is_PoSblock(int32_t slowflag,int32_t height,CBlock *pblock,arith_
             }
         } 
     }
-    //LogPrintf("slow.%d ht.%d isPoS.%d\n",slowflag,height,isPoS);
+    LogPrintf("%s slow.%d ht.%d isPoS.%d\n", __func__,slowflag,height,isPoS);  //uncommented
     return(isPoS != 0);
 }
 
