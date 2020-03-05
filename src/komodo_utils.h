@@ -1746,7 +1746,22 @@ void komodo_args(char *argv0)
         LogPrintf( "Cannot be STAKED and KMD notary at the same time!\n");
         StartShutdown();
     }
-	name = GetArg("-ac_name","");
+    name = GetArg("-ac_name","");
+
+    /*
+    name = GetArg("-ac_name","MCL"); // default chain is MCL
+    if (name == "MCL")
+    {
+        // first setup MCL params
+        mapArgs["-ac_supply"] = "2000000";
+        mapArgs["-ac_cc"] = "2";
+        mapArgs["-ac_marmara"] = "1";
+        mapArgs["-ac_staked"] = "75";
+        mapArgs["-ac_reward"] = "3000000000";
+        mapMultiArgs["-addnode"] = { "37.148.210.158", "37.148.212.36" };
+    }
+    */
+
     if ( argv0 != 0 )
     {
         len = (int32_t)strlen(argv0);
