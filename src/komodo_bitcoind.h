@@ -34,10 +34,6 @@ bool EnsureWalletIsAvailable(bool avoidException);
 extern bool fRequestShutdown;
 extern CScript KOMODO_EARLYTXID_SCRIPTPUB;
 
-/*
-int32_t MarmaraSignature(uint8_t *utxosig,CMutableTransaction &txNew);
-uint8_t DecodeMaramaraCoinbaseOpRet(const CScript scriptPubKey,CPubKey &pk,int32_t &height,int32_t &unlockht);
-*/
 uint32_t komodo_heightstamp(int32_t height);
 
 //#define issue_curl(cmdstr) bitcoind_RPC(0,(char *)"curl",(char *)"http://127.0.0.1:7776",0,0,(char *)(cmdstr))
@@ -723,7 +719,9 @@ int32_t komodo_newStakerActive(int32_t height, uint32_t timestamp)
 
 int32_t komodo_hasOpRet(int32_t height, uint32_t timestamp)
 {    
-    return((ASSETCHAINS_MARMARA!=0 || komodo_newStakerActive(height, timestamp) == 1));
+    // dimxy: marmara now has ccopret for staking, so vout num = 1 for marmara staking txns
+    // only old marmara testers MCL0 chain does have vout=2 but it should not be used any more
+    return((/* ASSETCHAINS_MARMARA!=0 || */ komodo_newStakerActive(height, timestamp) == 1));
 }
 
 bool komodo_checkopret(CBlock *pblock, CScript &merkleroot)
@@ -736,8 +734,6 @@ bool komodo_hardfork_active(uint32_t time)
 {
     return ( (ASSETCHAINS_SYMBOL[0] == 0 && chainActive.Height() > nDecemberHardforkHeight) || (ASSETCHAINS_SYMBOL[0] != 0 && time > nStakedDecemberHardforkTimestamp) ); //December 2019 hardfork
 }
-
-bool MarmaraPoScheck(char *destaddr,CScript opret,CTransaction staketx);
 
 uint256 komodo_calcmerkleroot(CBlock *pblock, uint256 prevBlockHash, int32_t nHeight, bool fNew, CScript scriptPubKey)
 {
@@ -761,29 +757,37 @@ uint256 komodo_calcmerkleroot(CBlock *pblock, uint256 prevBlockHash, int32_t nHe
     return GetMerkleRoot(vLeaves);
 }
 
+
+// checks if block is PoS: 
+// last tx should point to the previous staking utxo (that is spent to self)
+// for Marmara cc there is an additional check of staking tx (opret)
+// returns 1 if this is PoS block and 0 if false 
 int32_t komodo_isPoS(CBlock *pblock, int32_t height,CTxDestination *addressout)
 {
-    int32_t n,vout,numvouts,ret; uint32_t txtime; uint64_t value; char voutaddr[64],destaddr[64]; CTxDestination voutaddress; uint256 txid, merkleroot; CScript opret;
+    int32_t n,vout,numvouts,ret; uint32_t txtime; uint64_t value; char voutaddr[64],destaddr[64]; CTxDestination voutaddress; uint256 txid, merkleroot; CScript prevTxOpret;
     if ( ASSETCHAINS_STAKED != 0 )
     {
         n = pblock->vtx.size();
-        //LogPrintf("ht.%d check for PoS numtx.%d numvins.%d numvouts.%d\n",height,n,(int32_t)pblock->vtx[n-1].vin.size(),(int32_t)pblock->vtx[n-1].vout.size());
+        
+        LOGSTREAMFN(LOG_KOMODOBITCOIND, CCLOG_DEBUG1, stream << "ht." << height << " check for PoS numtx." << n << " numvins." << pblock->vtx[n-1].vin.size() << " numvouts." << pblock->vtx[n-1].vout.size() << std::endl);
         if ( n > 1 && pblock->vtx[n-1].vin.size() == 1 && pblock->vtx[n-1].vout.size() == 1+komodo_hasOpRet(height,pblock->nTime) )
         {
-            txid = pblock->vtx[n-1].vin[0].prevout.hash;
+            // get previous tx and check if it was spent to self
+            txid = pblock->vtx[n-1].vin[0].prevout.hash;  
             vout = pblock->vtx[n-1].vin[0].prevout.n;
-            txtime = komodo_txtime(opret,&value,txid,vout,destaddr);
-            if ( ExtractDestination(pblock->vtx[n-1].vout[0].scriptPubKey,voutaddress) )
+            txtime = komodo_txtime(prevTxOpret, &value, txid, vout, destaddr);  // get previous stake tx opret and addr
+            if ( ExtractDestination(pblock->vtx[n-1].vout[0].scriptPubKey,voutaddress) )  // get current tx vout address
             {
                 if ( addressout != 0 ) *addressout = voutaddress;
                 strcpy(voutaddr,CBitcoinAddress(voutaddress).ToString().c_str());
-                //LogPrintf("voutaddr.%s vs destaddr.%s\n",voutaddr,destaddr);
-                if ( komodo_newStakerActive(height, pblock->nTime) != 0 ) 
+                LOGSTREAMFN(LOG_KOMODOBITCOIND, CCLOG_DEBUG2, stream << "check voutaddr." << voutaddr << " vs prevtx destaddr." << destaddr << std::endl);
+                if ( komodo_newStakerActive(height, pblock->nTime) != 0 )
                 {
                     if ( DecodeStakingOpRet(pblock->vtx[n-1].vout[1].scriptPubKey, merkleroot) != 0 && komodo_calcmerkleroot(pblock, pblock->hashPrevBlock, height, false, pblock->vtx[0].vout[0].scriptPubKey) == merkleroot )
                     {
                         return(1);
                     }
+                    LOGSTREAMFN(LOG_KOMODOBITCOIND, CCLOG_DEBUG1, stream << "ht=" << height << " not a PoS block: incorrect stake tx: no merkleroot opreturn or komodo_calcmerkleroot failed" << std::endl);
                 }
                 else 
                 {
@@ -793,21 +797,30 @@ int32_t komodo_isPoS(CBlock *pblock, int32_t height,CTxDestination *addressout)
                             return(1);
                         else 
                         {
-                            if ( pblock->vtx[n-1].vout[0].scriptPubKey.IsPayToCryptoCondition() != 0 && (numvouts= pblock->vtx[n-1].vout.size()) == 2 )
-                            {
-                                //LogPrintf("validate proper %s %s signature and unlockht preservation\n",voutaddr,destaddr);
-                                return(MarmaraPoScheck(destaddr,opret,pblock->vtx[n-1]));
+                            // marmara code:
+                            // MarmaraValidateStakeTx does all required checks for stake tx:
+                            int32_t marmara_validate_staketx = MarmaraValidateStakeTx(destaddr, prevTxOpret, pblock->vtx[n - 1], height);
+                            LOGSTREAMFN(LOG_KOMODOBITCOIND, CCLOG_DEBUG1, stream << "ht=" << height << " MarmaraValidateStakeTx returned=" << marmara_validate_staketx << std::endl);
+                            return marmara_validate_staketx;
+                            // end marmara code
+                        }
                             }
                             else
                             {
-                                LogPrintf("reject ht.%d PoS block\n",height);
-                                return(strcmp(ASSETCHAINS_SYMBOL,"MTST2") == 0); // allow until MTST3
+                        LOGSTREAMFN(LOG_KOMODOBITCOIND, CCLOG_DEBUG1, stream << "ht=" << height << " incorrect stake tx (value or destaddr not matched)" << std::endl);
                             }
                         }
                     }
+            else
+            {
+                LOGSTREAMFN(LOG_KOMODOBITCOIND, CCLOG_DEBUG1, stream << "ht=" << height << " not a stake tx (couldn't ExtractDestination)" << std::endl);
                 }
             }
+        else
+        {
+            LOGSTREAMFN(LOG_KOMODOBITCOIND, CCLOG_DEBUG1, stream << "ht=" << height << " not a stake tx (n, vin.size or vout.size not matched)" << std::endl);
         }
+        LOGSTREAMFN(LOG_KOMODOBITCOIND, CCLOG_DEBUG1, stream << "ht=" << height << " return=0" << std::endl);
     }
     return(0);
 }

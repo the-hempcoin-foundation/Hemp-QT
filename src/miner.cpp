@@ -64,6 +64,8 @@
 #endif
 #include <mutex>
 
+#include "cc/CCMarmara.h"
+
 using namespace std;
 
 //////////////////////////////////////////////////////////////////////////////
@@ -133,7 +135,6 @@ void UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParams, 
         pblock->nBits = GetNextWorkRequired(pindexPrev, pblock, consensusParams);
     }
 }
-
 #include "komodo_defs.h"
 #include "cc/CCinclude.h"
 
@@ -156,8 +157,6 @@ int32_t komodo_newStakerActive(int32_t height, uint32_t timestamp);
 int32_t komodo_notaryvin(CMutableTransaction &txNew,uint8_t *notarypub33, void* ptr);
 int32_t decode_hex(uint8_t *bytes,int32_t n,char *hex);
 int32_t komodo_is_notarytx(const CTransaction& tx);
-CScript Marmara_scriptPubKey(int32_t height,CPubKey pk);
-CScript MarmaraCoinbaseOpret(uint8_t funcid,int32_t height,CPubKey pk);
 uint64_t komodo_notarypay(CMutableTransaction &txNew, std::vector<int8_t> &NotarisationNotaries, uint32_t timestamp, int32_t height, uint8_t *script, int32_t len);
 int32_t komodo_notaries(uint8_t pubkeys[64][33],int32_t height,uint32_t timestamp);
 int32_t komodo_getnotarizedheight(uint32_t timestamp,int32_t height, uint8_t *script, int32_t len);
@@ -684,12 +683,26 @@ CBlockTemplate* CreateNewBlock(CPubKey _pk,const CScript& _scriptPubKeyIn, int32
                 }
                  
                 siglen = komodo_staked(txStaked, pblock->nBits, &blocktime, &txtime, &utxotxid, &utxovout, &utxovalue, utxosig, merkleroot);
-                if ( komodo_newStakerActive(nHeight, blocktime) != 0 )
-                    nFees += utxovalue;
-                //LogPrintf( "added to coinbase.%llu staking tx valueout.%llu\n", (long long unsigned)utxovalue, (long long unsigned)txStaked.vout[0].nValue);
+                if ( komodo_newStakerActive(nHeight, blocktime) != 0 && !ASSETCHAINS_MARMARA)
+                    nFees += utxovalue;         // this adds utxovalue to coinbase that causes 'Coinbase pays too much' errors. I temporarily turned this off for marmara
+                //LogPrintf("added to coinbase.%llu staking tx valueout.%llu\n", (long long unsigned)utxovalue, (long long unsigned)txStaked.vout[0].nValue);
                 uint32_t delay = ASSETCHAINS_ALGO != ASSETCHAINS_EQUIHASH ? ASSETCHAINS_STAKED_BLOCK_FUTURE_MAX : ASSETCHAINS_STAKED_BLOCK_FUTURE_HALF;
                 if ( komodo_waituntilelegible(blocktime, stakeHeight, delay) == 0 )
                     return(0);
+
+                if (ASSETCHAINS_MARMARA && nHeight > 0 && (nHeight & 1) == 0)
+                {
+                    CScript EncodeStakingOpRet(uint256 merkleroot);
+
+                    // update coinbase spk based on marmara staked tx and and recalculate staked tx merkle root:
+                    scriptPubKeyIn = MarmaraCreatePoSCoinbaseScriptPubKey(nHeight, scriptPubKeyIn, txStaked);
+                    uint256 merkleroot = komodo_calcmerkleroot(pblock, pindexPrev->GetBlockHash(), nHeight, true, scriptPubKeyIn);
+                    if (txStaked.vout.size() == 2) { // merkle opret was created
+                        txStaked.vout[1].scriptPubKey = EncodeStakingOpRet(merkleroot);
+                        siglen = MarmaraSignature(utxosig, txStaked);  // add marmara opret and sign the stake tx 
+                        LOGSTREAMFN("marmara", CCLOG_DEBUG1, stream << "updated coinbase scriptPubKeyIn and merkleroot in staked tx for height=" << nHeight << std::endl);
+                    }
+                }
             }
 
             if ( siglen > 0 )
@@ -729,14 +742,9 @@ CBlockTemplate* CreateNewBlock(CPubKey _pk,const CScript& _scriptPubKeyIn, int32
             txNew.vout[0].nValue += 5000;
         pblock->vtx[0] = txNew;
 
-        if ( ASSETCHAINS_MARMARA != 0 && nHeight > 0 && (nHeight & 1) == 0 )
-        {
-            char checkaddr[64];
-            Getscriptaddress(checkaddr,txNew.vout[0].scriptPubKey);
-            //`LogPrintf("set mining coinbase -> %s\n",checkaddr);
-            txNew.vout.resize(2);
-            txNew.vout[1].nValue = 0;
-            txNew.vout[1].scriptPubKey = MarmaraCoinbaseOpret('C',nHeight,pk);
+        if (ASSETCHAINS_MARMARA && nHeight > 0 && (nHeight & 1) == 0) 
+        {  // add marmara coinbase opret for activated coins (for even blocks)
+            // MarmaraCreatePoSCoinbaseScriptPubKey(txNew, nHeight, pk, isStake, pblock->vtx.back());
         }
         else if ( nHeight > 1 && ASSETCHAINS_SYMBOL[0] != 0 && (ASSETCHAINS_OVERRIDE_PUBKEY33[0] != 0 || ASSETCHAINS_SCRIPTPUB.size() > 1) && (ASSETCHAINS_COMMISSION != 0 || ASSETCHAINS_FOUNDERS_REWARD != 0)  && (commission= komodo_commission((CBlock*)&pblocktemplate->block,(int32_t)nHeight)) != 0 )
         {
@@ -1048,8 +1056,11 @@ CBlockTemplate* CreateNewBlockWithKey(CReserveKey& reservekey, int32_t nHeight, 
             scriptPubKey[34] = OP_CHECKSIG;
         }
     }
-    if ( ASSETCHAINS_MARMARA != 0 && nHeight > 0 && (nHeight & 1) == 0 )
-        scriptPubKey = Marmara_scriptPubKey(nHeight,pubkey);
+    if (ASSETCHAINS_MARMARA)
+    {
+        // create marmara activated coins spk for even blocks
+        scriptPubKey = MarmaraCreateDefaultCoinbaseScriptPubKey(nHeight, pubkey);   
+    }
     return CreateNewBlock(pubkey, scriptPubKey, gpucount, isStake);
 }
 
