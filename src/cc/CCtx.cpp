@@ -219,7 +219,6 @@ UniValue FinalizeCCTxExt(bool remote, uint64_t CCmask, struct CCcontract_info *c
                     //LogPrintf( "FinalizeCCTx() matched cc myaddr (%s)\n", myaddr);
                     privkey = myprivkey;
                     cond = mycond;
-
                 }
 				else if (strcmp(destaddr, mytokensaddr) == 0)  // if this is TokensCC1vout
 				{
@@ -610,6 +609,7 @@ int64_t CCtoken_balance(char *coinaddr,uint256 reftokenid)
     return(sum);
 }
 
+// finds two utxo indexes that are closest to the passed value from below or above:
 int32_t CC_vinselect(int32_t *aboveip,int64_t *abovep,int32_t *belowip,int64_t *belowp,struct CC_utxo utxos[],int32_t numunspents,int64_t value)
 {
     int32_t i,abovei,belowi; int64_t above,below,gap,atx_value;
@@ -688,7 +688,7 @@ int64_t AddNormalinputsLocal(CMutableTransaction &mtx,CPubKey mypk,int64_t total
     sum = 0;
     BOOST_FOREACH(const COutput& out, vecOutputs)
     {
-        if ( out.fSpendable != 0 && out.tx->vout[out.i].nValue >= threshold )
+        if ( out.fSpendable != 0 && (vecOutputs.size() < maxinputs || out.tx->vout[out.i].nValue >= threshold) )
         {
             txid = out.tx->GetHash();
             vout = out.i;
@@ -792,8 +792,8 @@ int64_t AddNormalinputsRemote(CMutableTransaction &mtx, CPubKey mypk, int64_t to
     {
         txid = it->first.txhash;
         vout = (int32_t)it->first.index;
-        if ( it->second.satoshis < threshold )
-            continue;
+        //if ( it->second.satoshis < threshold )
+        //    continue;
         if ( myGetTransaction(txid,tx,hashBlock) != 0 && tx.vout.size() > 0 && vout < tx.vout.size() && tx.vout[vout].scriptPubKey.IsPayToCryptoCondition() == 0 )
         {
             //LogPrintf("check %.8f to vins array.%d of %d %s/v%d\n",(double)out.tx->vout[out.i].nValue/COIN,n,maxutxos,txid.GetHex().c_str(),(int32_t)vout);
