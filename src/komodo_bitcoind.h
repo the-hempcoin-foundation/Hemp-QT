@@ -634,6 +634,7 @@ uint64_t komodo_seed(int32_t height)
     return(seed);
 }
 
+// get previous staking utxo opret, address and txtime
 uint32_t komodo_txtime(CScript &opret,uint64_t *valuep,uint256 hash, int32_t n, char *destaddr)
 {
     CTxDestination address; CTransaction tx; uint256 hashBlock; int32_t numvouts;
@@ -651,10 +652,27 @@ uint32_t komodo_txtime(CScript &opret,uint64_t *valuep,uint256 hash, int32_t n, 
     //LogPrintf("%s/v%d locktime.%u\n",hash.ToString().c_str(),n,(uint32_t)tx.nLockTime);
     if ( n < numvouts )
     {
+        bool isCCOpret = false;
         *valuep = tx.vout[n].nValue;
-        opret = tx.vout[numvouts-1].scriptPubKey;
+
+        if (ASSETCHAINS_MARMARA)
+        {
+            // get staking utxo opret
+            // first try if cc opret exists
+            if (tx.vout[n].scriptPubKey.IsPayToCryptoCondition())
+            {
+                if (MyGetCCopret(tx.vout[n].scriptPubKey, opret))
+                    isCCOpret = true;
+            }
+        }
+        if (!isCCOpret)  
+            opret = tx.vout[numvouts-1].scriptPubKey;  // if no cc opret then use opret in the last vout 
+
         if (ExtractDestination(tx.vout[n].scriptPubKey, address))
-            strcpy(destaddr,CBitcoinAddress(address).ToString().c_str());
+        {
+            strcpy(destaddr, CBitcoinAddress(address).ToString().c_str());
+            LogPrint(LOG_KOMODOBITCOIND, "%s in stake tx found opret and destaddr=%s\n", __func__, destaddr);
+        }
     }
     return(tx.nLockTime);
 }
@@ -663,6 +681,21 @@ CBlockIndex *komodo_getblockindex(uint256 hash)
 {
     BlockMap::const_iterator it = mapBlockIndex.find(hash);
     return((it != mapBlockIndex.end()) ? it->second : NULL);
+}
+
+// Extension point to add preferences for stakes (dimxy)
+// TODO: what if for some chain several chain's params require different multipliers. Which to select, max?
+static int32_t GetStakeMultiplier(CTransaction &tx, int32_t nvout)
+{
+    int32_t multiplier = 1; // default value
+
+    if (ASSETCHAINS_MARMARA != 0) {
+        multiplier = MarmaraGetStakeMultiplier(tx, nvout);
+    }
+
+    CAmount nValue = (nvout >= 0 && nvout < tx.vout.size() ? tx.vout[nvout].nValue : -1);
+    LOGSTREAMFN(LOG_KOMODOBITCOIND, CCLOG_DEBUG2, stream << "stake multiplier=" << multiplier << " nValue=" << nValue << std::endl);  
+    return multiplier;
 }
 
 uint32_t komodo_txtime2(uint64_t *valuep,uint256 hash,int32_t n,char *destaddr)
@@ -684,7 +717,9 @@ uint32_t komodo_txtime2(uint64_t *valuep,uint256 hash,int32_t n,char *destaddr)
     //LogPrintf("%s/v%d locktime.%u\n",hash.ToString().c_str(),n,(uint32_t)tx.nLockTime);
     if ( n < tx.vout.size() )
     {
-        *valuep = tx.vout[n].nValue;
+        int32_t stakemultiplier = GetStakeMultiplier(tx, n);
+        *valuep = tx.vout[n].nValue * stakemultiplier; 
+
         if (ExtractDestination(tx.vout[n].scriptPubKey, address))
             strcpy(destaddr,CBitcoinAddress(address).ToString().c_str());
     }
@@ -2426,10 +2461,11 @@ int32_t komodo_checkPOW(int64_t stakeTxValue, int32_t slowflag,CBlock *pblock,in
         KOMODO_TEST_ASSETCHAIN_SKIP_POW = 1;
     if ( !CheckEquihashSolution(pblock, Params()) )
     {
-        LogPrintf("komodo_checkPOW slowflag.%d ht.%d CheckEquihashSolution failed\n",slowflag,height);
+        LOGSTREAMFN(LOG_KOMODOBITCOIND, CCLOG_ERROR, stream << "slowflag." << slowflag << " ht." << height << " CheckEquihashSolution failed" << std::endl);
         return(-1);
     }
     hash = pblock->GetHash();
+    LOGSTREAMFN(LOG_KOMODOBITCOIND, CCLOG_DEBUG1, stream << "checking block." << hash.GetHex() << " ht." << height << " bits." << pblock->nBits << std::endl);
     bnTarget.SetCompact(pblock->nBits,&fNegative,&fOverflow);
     bhash = UintToArith256(hash);
     possible = komodo_block2pubkey33(pubkey33,pblock);
@@ -2437,7 +2473,7 @@ int32_t komodo_checkPOW(int64_t stakeTxValue, int32_t slowflag,CBlock *pblock,in
     {
         if ( slowflag != 0 )
         {
-            LogPrintf("height.%d slowflag.%d possible.%d cmp.%d\n",height,slowflag,possible,bhash > bnTarget);
+            LOGSTREAMFN(LOG_KOMODOBITCOIND, CCLOG_INFO, stream << "height." << height << " slowflag." << slowflag << " possible."<< possible << " (is bhash > bnTarget)=" << (bhash > bnTarget) << std::endl);
             return(0);
         }
         BlockMap::const_iterator it = mapBlockIndex.find(pblock->hashPrevBlock);
@@ -2497,12 +2533,7 @@ int32_t komodo_checkPOW(int64_t stakeTxValue, int32_t slowflag,CBlock *pblock,in
                 bnTarget = komodo_PoWtarget(&PoSperc,bnTarget,height,ASSETCHAINS_STAKED,newStakerActive);
                 if ( bhash > bnTarget ) 
                 {
-                    for (i=31; i>=16; i--)
-                        LogPrintf("%02x",((uint8_t *)&bhash)[i]);
-                    LogPrintf(" > ");
-                    for (i=31; i>=16; i--)
-                        LogPrintf("%02x",((uint8_t *)&bnTarget)[i]);
-                    LogPrintf(" ht.%d PoW diff violation PoSperc.%d vs goalperc.%d\n",height,PoSperc,(int32_t)ASSETCHAINS_STAKED);
+                    LOGSTREAM(LOG_KOMODOBITCOIND, CCLOG_ERROR, stream << "[" << ASSETCHAINS_SYMBOL << ":" << height << "]" << " bnhash=" << hash2str(bhash, 16) << " > bnTarget=" << hash2str(bnTarget, 16) << " ht." << height << " PoW diff violation PoSperc." << PoSperc << " vs goalperc." << (int)ASSETCHAINS_STAKED << std::endl);
                     return(-1);
                 }
                 else
@@ -2512,7 +2543,8 @@ int32_t komodo_checkPOW(int64_t stakeTxValue, int32_t slowflag,CBlock *pblock,in
                         // PoW fake blocks will be rejected here. If a staking tx is included in a block that meets PoW min diff after block 100, then this will reject it. 
                         if ( pblock->vtx.size() > 1 && pblock->vtx[pblock->vtx.size()-1].vout.size() == 2 && DecodeStakingOpRet(pblock->vtx[pblock->vtx.size()-1].vout[1].scriptPubKey, merkleroot) != 0 )
                         {
-                            LogPrintf( "[%s:%d] staking tx in PoW block, nBits.%u < target.%u\n", ASSETCHAINS_SYMBOL,height,bhash.GetCompact(),bnTarget.GetCompact());
+                            LogPrintf("[%s:%d] staking tx in PoW block, nBits.%u < target.%u\n", ASSETCHAINS_SYMBOL,height,bhash.GetCompact(),bnTarget.GetCompact());
+                            LOGSTREAM(LOG_KOMODOBITCOIND, CCLOG_ERROR, stream << "[" << ASSETCHAINS_SYMBOL << ":" << height << "]" << " staking tx found in PoW block, nBits=" << bhash.GetCompact() << " < target=" << bnTarget.GetCompact() << std::endl);
                             return(-1);
                         }
                         // set the pindex->segid as this is now fully validated to be a PoW block. 
@@ -2528,7 +2560,8 @@ int32_t komodo_checkPOW(int64_t stakeTxValue, int32_t slowflag,CBlock *pblock,in
         }
         else if ( is_PoSblock < 0 )
         {
-            LogPrintf("[%s:%d] unexpected negative is_PoSblock.%d\n",ASSETCHAINS_SYMBOL,height,is_PoSblock);
+            //LogPrintf("[%s:%d] unexpected negative is_PoSblock.%d\n",ASSETCHAINS_SYMBOL,height,is_PoSblock);
+            LOGSTREAM(LOG_KOMODOBITCOIND, CCLOG_ERROR, stream << "[" << ASSETCHAINS_SYMBOL << ":" << height << "]" << " unexpected negative is_PoSblock." << is_PoSblock << std::endl);
             return(-1);
         }
         else 
@@ -2540,12 +2573,14 @@ int32_t komodo_checkPOW(int64_t stakeTxValue, int32_t slowflag,CBlock *pblock,in
                 // the coinbase must pay the fees from the last transaction and the block reward at a minimum.
                 if ( pblock->vtx.size() < 1 || pblock->vtx[0].vout.size() < 1 )
                 {
-                    LogPrintf( "[%s:%d] missing coinbase.\n", ASSETCHAINS_SYMBOL, height);
+                    //LogPrintf("[%s:%d] missing coinbase.\n", ASSETCHAINS_SYMBOL, height);
+                    LOGSTREAM(LOG_KOMODOBITCOIND, CCLOG_ERROR, stream << "[" << ASSETCHAINS_SYMBOL << ":" << height << "]" << " missing coinbase.\n");
                     return(-1);
                 }
                 else if ( pblock->vtx[0].vout[0].nValue < stakeTxValue )
                 {
-                    LogPrintf( "[%s:%d] coinbase vout0.%lld < blockreward+stakingtxfee.%lld\n", ASSETCHAINS_SYMBOL, height, (long long)pblock->vtx[0].vout[0].nValue, (long long)stakeTxValue);
+                    //LogPrintf("[%s:%d] coinbase vout0.%lld < blockreward+stakingtxfee.%lld\n", ASSETCHAINS_SYMBOL, height, (long long)pblock->vtx[0].vout[0].nValue, (long long)stakeTxValue);
+                    LOGSTREAM(LOG_KOMODOBITCOIND, CCLOG_ERROR, stream << "[" << ASSETCHAINS_SYMBOL << ":" << height << "]" << " coinbase vout0." << (long long)pblock->vtx[0].vout[0].nValue << " < blockreward+stakingtxfee." << (long long)stakeTxValue << std::endl);
                     return(-1);
                 }
                 // set the pindex->segid as this is now fully validated to be a PoS block. 
@@ -2606,7 +2641,8 @@ int32_t komodo_checkPOW(int64_t stakeTxValue, int32_t slowflag,CBlock *pblock,in
             // Check the notarisation tx is to the crypto address.
             if ( !komodo_is_notarytx(pblock->vtx[1]) == 1 )
             {
-                LogPrintf( "notarisation is not to crypto address ht.%i\n",height);
+                //LogPrintf("notarisation is not to crypto address ht.%i\n",height);
+                LOGSTREAM(LOG_KOMODOBITCOIND, CCLOG_ERROR, stream << "[" << ASSETCHAINS_SYMBOL << ":" << height << "]" << " notarisation is not to crypto address ht." << height << std::endl);
                 return(-1); 
             }
             // Check min sigs.
