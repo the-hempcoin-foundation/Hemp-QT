@@ -57,7 +57,8 @@ UniValue FinalizeCCTxExt(bool remote, uint64_t CCmask, struct CCcontract_info *c
     int32_t i,flag,mgret,utxovout,n,err = 0;
 	char myaddr[64], destaddr[64], unspendable[64], mytokensaddr[64], mysingletokensaddr[64], unspendabletokensaddr[64],CC1of2CCaddr[64];
     uint8_t *privkey = NULL, myprivkey[32] = { '\0' }, unspendablepriv[32] = { '\0' }, /*tokensunspendablepriv[32],*/ *msg32 = 0;
-	CC *mycond=0, *othercond=0, *othercond2=0,*othercond4=0, *othercond3=0, *othercond1of2=NULL, *othercond1of2tokens = NULL, *cond=0,  *condCC2=0,*mytokenscond = NULL, *mysingletokenscond = NULL, *othertokenscond = NULL;
+    CC *mycond = 0, *othercond = 0, *othercond2 = 0, *othercond4 = 0, *othercond3 = 0, *othercond1of2 = NULL, *othercond1of2tokens = NULL, *cond = 0, *condCC2 = 0,
+       *mytokenscond = NULL, *mysingletokenscond = NULL, *othertokenscond = NULL, *vectcond = NULL;
 	CPubKey unspendablepk /*, tokensunspendablepk*/;
 	struct CCcontract_info *cpTokens, tokensC;
     UniValue sigData(UniValue::VARR),result(UniValue::VOBJ);
@@ -309,9 +310,35 @@ UniValue FinalizeCCTxExt(bool remote, uint64_t CCmask, struct CCcontract_info *c
                         }
                     } //else  privkey = myprivkey;
 
-                    if ( flag == 0 )
+                    if (flag == 0)
                     {
-                        LogPrintf("CC signing error: vini.%d has unknown CC address.(%s)\n",i,destaddr);
+                        const uint8_t nullpriv[32] = {'\0'};
+                        // use vector of dest addresses and conds to probe vintxconds
+                        for (auto &t : cp->CCvintxprobes) {
+                            char coinaddr[64];
+
+                            if (vectcond != NULL)
+                                cc_free(vectcond);  // free prev used cond
+                            vectcond = t.CCwrapped.getCC();  // Note: need to cc_free at the function exit
+                            if (vectcond != NULL) {
+                                Getscriptaddress(coinaddr, CCPubKey(vectcond));
+                                // std::cerr << __func__ << " destaddr=" << destaddr << " coinaddr=" << coinaddr << std::endl;
+                                if (strcmp(destaddr, coinaddr) == 0) {
+                                    if (memcmp(t.CCpriv, nullpriv, sizeof(t.CCpriv) / sizeof(t.CCpriv[0])) != 0)
+                                        privkey = t.CCpriv;
+                                    else
+                                        privkey = myprivkey;
+                                    flag = 1;
+                                    cond = vectcond;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (flag == 0)
+                    {
+                        fprintf(stderr,"CC signing error: vini.%d has unknown CC address.(%s)\n",i,destaddr);
                         memset(myprivkey,0,32);
                         return sigDataNull;
                     }
@@ -381,6 +408,9 @@ UniValue FinalizeCCTxExt(bool remote, uint64_t CCmask, struct CCcontract_info *c
     if ( othertokenscond != 0 )
         cc_free(othertokenscond);   
     memset(myprivkey,0,sizeof(myprivkey));
+    if (vectcond != NULL)
+        cc_free(vectcond);  
+
     std::string strHex = EncodeHexTx(mtx);
     if ( strHex.size() > 0 )
         result.push_back(Pair(JSON_HEXTX, strHex));
