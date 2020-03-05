@@ -295,6 +295,37 @@ CPubKey CCtxidaddr(char *txidaddr,uint256 txid)
     return(pk);
 }
 
+// CCtxidaddr version that makes valid pubkey by tweaking it
+CPubKey CCtxidaddr_tweak(char *txidaddr, uint256 txid)
+{
+    uint8_t buf33[33]; 
+    CPubKey pk;
+    
+    buf33[0] = 0x02;
+    endiancpy(&buf33[1], (uint8_t *)&txid, 32);
+
+    // tweak last byte
+    // NOTE: this algorithm should not be changed, it should remain compatible with existing in chains txid-pubkeys
+    int maxtweaks = 256;
+    while (maxtweaks--) {
+        pk = buf2pk(buf33);
+        if (pk.IsFullyValid())
+            break;
+        buf33[sizeof(buf33)-1]++;
+    }
+
+    if (pk.IsFullyValid()) {
+        if (txidaddr != NULL)
+            Getscriptaddress(txidaddr, CScript() << ParseHex(HexStr(pk)) << OP_CHECKSIG);
+        return(pk);
+    }
+    else    {
+        if (txidaddr != NULL)
+            strcpy(txidaddr, "");
+        return CPubKey();
+    }
+}
+
 CPubKey CCCustomtxidaddr(char *txidaddr,uint256 txid,uint8_t taddr,uint8_t prefix,uint8_t prefix2)
 {
     uint8_t buf33[33]; CPubKey pk;
@@ -651,6 +682,35 @@ int32_t CCCointxidExists(char const *logcategory,uint256 cointxid)
     return(myIs_coinaddr_inmempoolvout(logcategory,txidaddr));
 }
 
+bool CompareHexVouts(std::string hex1, std::string hex2)
+{
+    CTransaction tx1,tx2;
+
+    if (!DecodeHexTx(tx1,hex1)) return (false);
+    if (!DecodeHexTx(tx2,hex2)) return (false);
+    if (tx1.vout.size()!=tx2.vout.size()) return (false);
+    for (int i=0;i<(int32_t)tx1.vout.size();i++) if (tx1.vout[i]!=tx2.vout[i]) return (false);
+    return (true);
+}
+
+bool CheckVinPk(const CTransaction &tx, int32_t n, std::vector<CPubKey> &pubkeys)
+{
+    CTransaction vintx; uint256 blockHash; char destaddr[64],pkaddr[64];
+
+    if(myGetTransaction(tx.vin[n].prevout.hash, vintx, blockHash)==0) return (false);
+    if( tx.vin[n].prevout.n < vintx.vout.size() && Getscriptaddress(destaddr, vintx.vout[tx.vin[n].prevout.n].scriptPubKey) != 0 )
+    {
+        for(int i=0;i<(int32_t)pubkeys.size();i++)
+        {
+            pubkey2addr(pkaddr, (uint8_t *)pubkeys[i].begin());
+            if (strcmp(pkaddr, destaddr) == 0) {
+                return (true);
+            }
+        }
+    }    
+    return (false);
+}
+
 /* Get the block merkle root for a proof
  * IN: proofData
  * OUT: merkle root
@@ -896,4 +956,22 @@ bool CClib_Dispatch(const CC *cond,Eval *eval,std::vector<uint8_t> paramsNull,co
         return(false); //eval->Invalid("error in CClib_validate");
     }
     return eval->Invalid("cclib CC must have evalcode between 16 and 127");
+}
+
+
+// add probe vintx conditions for making CCSig in FinalizeCCTx
+void CCAddVintxCond(struct CCcontract_info *cp, CC *cond, const uint8_t *priv)
+{
+    struct CCVintxProbe ccprobe;
+
+    if (cp == NULL) return;
+    if (cond == NULL) return;
+    
+    ccprobe.CCwrapped.setCC(cond);
+    if( priv != NULL )
+        memcpy(ccprobe.CCpriv, priv, sizeof(ccprobe.CCpriv) / sizeof(ccprobe.CCpriv[0]));
+    else
+        memset(ccprobe.CCpriv, '\0', sizeof(ccprobe.CCpriv) / sizeof(ccprobe.CCpriv[0]));
+
+    cp->CCvintxprobes.push_back(ccprobe);
 }

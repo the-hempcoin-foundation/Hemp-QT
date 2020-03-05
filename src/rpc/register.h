@@ -34,7 +34,8 @@ void RegisterMiscRPCCommands(CRPCTable &tableRPC);
 void RegisterMiningRPCCommands(CRPCTable &tableRPC);
 /** Register raw transaction RPC commands */
 void RegisterRawTransactionRPCCommands(CRPCTable &tableRPC);
-
+/** Register Marmara CC RPC commands */
+void RegisterMarmaraRPCCommands(CRPCTable &tableRPC);
 /** Register test transaction RPC commands */
 void RegisterTesttransactionsRPCCommands(CRPCTable &tableRPC);
 
@@ -46,6 +47,7 @@ static inline void RegisterAllCoreRPCCommands(CRPCTable &tableRPC)
     RegisterMiscRPCCommands(tableRPC);
     RegisterMiningRPCCommands(tableRPC);
     RegisterRawTransactionRPCCommands(tableRPC);
+    RegisterMarmaraRPCCommands(tableRPC);
 #ifdef TESTMODE
     RegisterTesttransactionsRPCCommands(tableRPC);
 #endif

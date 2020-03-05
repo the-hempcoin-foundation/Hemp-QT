@@ -15,6 +15,7 @@
 
 // paxdeposit equivalent in reverse makes opreturn and KMD does the same in reverse
 #include "komodo_defs.h"
+#include "cc/CCMarmara.h"
 
 /*#include "secp256k1/include/secp256k1.h"
 #include "secp256k1/include/secp256k1_schnorrsig.h"
@@ -2852,4 +2853,43 @@ int32_t komodo_priceget(int64_t *buf64,int32_t ind,int32_t height,int32_t numblo
     }
     pthread_mutex_unlock(&pricemutex);
     return(retval);
+}
+
+// place to add miner's created transactions
+UniValue sendrawtransaction(const UniValue& params, bool fHelp, const CPubKey &mypk);  
+
+void komodo_createminerstransactions()
+{
+    std::vector<CTransaction> minersTransactions;
+    CBlockIndex *pIndexTip = chainActive.LastTip();
+    int32_t nHeight = pIndexTip ? pIndexTip->GetHeight() : 0;
+
+    if(ASSETCHAINS_MARMARA != 0)   
+    {
+        MarmaraRunAutoSettlement(nHeight, minersTransactions);        // run Marmara autosettlement, returns settlement transactions
+    }
+    // TODO create 'kogs' transactions...
+
+    // send miner created transaction
+    CPubKey minerpk = pubkey2pk(Mypubkey());
+    for (const auto &tx : minersTransactions)
+    {
+        std::string hextx = HexStr(E_MARSHAL(ss << tx));
+        UniValue rpcparams(UniValue::VARR), txparam(UniValue::VOBJ);
+        txparam.setStr(hextx);
+        rpcparams.push_back(txparam);
+        try {
+            // TODO: change sendrawtransaction to low-level RelayTransaction function
+            sendrawtransaction(rpcparams, false, CPubKey());  // NOTE: throws error, so catch them!
+        }
+        catch (std::runtime_error error)
+        {
+            LOGSTREAMFN("miner", CCLOG_ERROR, stream << std::string("could not send miner created transaction: bad parameters: ") + error.what());
+        }
+        catch (UniValue error)
+        {
+            LOGSTREAMFN("miner", CCLOG_ERROR, stream << std::string("error: could not send miner created tx: ") + error.getValStr());
+        }
+    }
+
 }
