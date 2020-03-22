@@ -173,7 +173,8 @@ void WalletModel::pollBalanceChanged()
         cachedNumBlocks = chainActive.Height();
 
         checkBalanceChanged();
-        checkMarmaraBalanceChanged();
+        if (ASSETCHAINS_MARMARA)
+            checkMarmaraBalanceChanged();
 
         if(transactionTableModel)
             transactionTableModel->updateConfirmations();
@@ -190,6 +191,8 @@ CAmount MarmaraGetLCLAmount();
 
 CAmount WalletModel::getActivatedBalance() const
 {
+    if (!ASSETCHAINS_MARMARA) return 0;
+
     CPubKey refpk = MarmaraGetMyPubkey();
     if (refpk.IsValid())
     {
@@ -213,6 +216,7 @@ CAmount WalletModel::getActivatedBalance() const
 
 CAmount WalletModel::getLCLBalance() const
 {
+    if (!ASSETCHAINS_MARMARA) return 0;
     return MarmaraGetLCLAmount();
 }
 

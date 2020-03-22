@@ -167,6 +167,8 @@ OverviewPage::~OverviewPage()
     delete ui;
 }
 
+/* add missing declarations (TODO: refactor this) */
+#include "cc/CCMarmara.h"
 void OverviewPage::setMarmaraBalance(const CAmount& activatedBalance, const CAmount& LCLBalance) 
 {
     int unit = walletModel->getOptionsModel()->getDisplayUnit();
@@ -176,6 +178,11 @@ void OverviewPage::setMarmaraBalance(const CAmount& activatedBalance, const CAmo
     ui->lablelLCLBalance->setText(KomodoUnits::formatWithUnit(unit, LCLBalance, false, KomodoUnits::separatorAlways));
     ui->lineMarmara2->setVisible(false);
     ui->labelTotalMarmaraBalance->setText(KomodoUnits::formatWithUnit(unit, activatedBalance + LCLBalance, false, KomodoUnits::separatorAlways));
+
+    std::string pubkey_short = HexStr(MarmaraGetMyPubkey());
+    const size_t nMaxPubkeySymbols = 16 - 4;
+    pubkey_short = pubkey_short.substr(0, nMaxPubkeySymbols) + "..." + pubkey_short.substr(pubkey_short.size() - 1 - nMaxPubkeySymbols, nMaxPubkeySymbols);
+    ui->labelPubkey->setText(QString::fromStdString(pubkey_short));
 }
 
 void OverviewPage::setBalance(const CAmount& balance, const CAmount& unconfirmedBalance, const CAmount& immatureBalance, 
