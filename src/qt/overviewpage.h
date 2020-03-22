@@ -41,6 +41,7 @@ public Q_SLOTS:
     void setBalance(const CAmount& balance, const CAmount& unconfirmedBalance, const CAmount& immatureBalance,
                     const CAmount& watchOnlyBalance, const CAmount& watchUnconfBalance, const CAmount& watchImmatureBalance,
                     const CAmount& privateBalance, const CAmount& interestBalance);
+    void setMarmaraBalance(const CAmount& activatedBalance, const CAmount& LCLBalance);
 
 Q_SIGNALS:
     void transactionClicked(const QModelIndex &index);
@@ -58,6 +59,9 @@ private:
     CAmount currentWatchImmatureBalance;
     CAmount currentPrivateBalance;
     CAmount currentInterestBalance;
+
+    CAmount currentActivatedBalance; /* Marmara Activated */
+    CAmount currentLCLBalance;       /* Marmara LCL (locked-in-loops) */
 
     TxViewDelegate *txdelegate;
     std::unique_ptr<TransactionFilterProxy> filter;

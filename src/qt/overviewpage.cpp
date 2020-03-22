@@ -124,6 +124,8 @@ OverviewPage::OverviewPage(const PlatformStyle *platformStyle, QWidget *parent) 
     currentWatchImmatureBalance(-1),
     currentPrivateBalance(-1),
     currentInterestBalance(-1),
+    currentActivatedBalance(-1),
+    currentLCLBalance(-1),
     txdelegate(new TxViewDelegate(platformStyle, this))
 {
     ui->setupUi(this);
@@ -133,6 +135,7 @@ OverviewPage::OverviewPage(const PlatformStyle *platformStyle, QWidget *parent) 
     icon.addPixmap(icon.pixmap(QSize(64,64), QIcon::Normal), QIcon::Disabled); // also set the disabled icon because we are using a disabled QPushButton to work around missing HiDPI support of QLabel (https://bugreports.qt.io/browse/QTBUG-42503)
     ui->labelTransactionsStatus->setIcon(icon);
     ui->labelWalletStatus->setIcon(icon);
+    ui->labelMarmaraStatus->setIcon(icon);
 
     // Recent transactions
     ui->listTransactions->setItemDelegate(txdelegate);
@@ -164,7 +167,20 @@ OverviewPage::~OverviewPage()
     delete ui;
 }
 
-void OverviewPage::setBalance(const CAmount& balance, const CAmount& unconfirmedBalance, const CAmount& immatureBalance, const CAmount& watchOnlyBalance, const CAmount& watchUnconfBalance, const CAmount& watchImmatureBalance, const CAmount& privateBalance, const CAmount& interestBalance)
+void OverviewPage::setMarmaraBalance(const CAmount& activatedBalance, const CAmount& LCLBalance) 
+{
+    int unit = walletModel->getOptionsModel()->getDisplayUnit();
+    currentActivatedBalance = activatedBalance;
+    currentLCLBalance = LCLBalance;
+    ui->labelActivatedBalance->setText(KomodoUnits::formatWithUnit(unit, activatedBalance, false, KomodoUnits::separatorAlways));
+    ui->lablelLCLBalance->setText(KomodoUnits::formatWithUnit(unit, LCLBalance, false, KomodoUnits::separatorAlways));
+    ui->lineMarmara2->setVisible(false);
+    ui->labelTotalMarmaraBalance->setText(KomodoUnits::formatWithUnit(unit, activatedBalance + LCLBalance, false, KomodoUnits::separatorAlways));
+}
+
+void OverviewPage::setBalance(const CAmount& balance, const CAmount& unconfirmedBalance, const CAmount& immatureBalance, 
+                              const CAmount& watchOnlyBalance, const CAmount& watchUnconfBalance, const CAmount& watchImmatureBalance, 
+                              const CAmount& privateBalance, const CAmount& interestBalance)
 {
     int unit = walletModel->getOptionsModel()->getDisplayUnit();
     currentBalance = balance;
@@ -273,6 +289,9 @@ void OverviewPage::updateDisplayUnit()
                        currentWatchOnlyBalance, currentWatchUnconfBalance, currentWatchImmatureBalance,
                        currentPrivateBalance, currentInterestBalance);
 
+        if (currentActivatedBalance !=1 || currentLCLBalance != -1) 
+            setMarmaraBalance(currentActivatedBalance, currentLCLBalance);
+
         // Update txdelegate->unit with the current unit
         txdelegate->unit = walletModel->getOptionsModel()->getDisplayUnit();
 
@@ -290,4 +309,5 @@ void OverviewPage::showOutOfSyncWarning(bool fShow)
 {
     ui->labelWalletStatus->setVisible(fShow);
     ui->labelTransactionsStatus->setVisible(fShow);
+    ui->labelMarmaraStatus->setVisible(fShow);
 }
