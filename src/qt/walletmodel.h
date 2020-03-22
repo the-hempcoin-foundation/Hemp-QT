@@ -172,6 +172,9 @@ public:
     CAmount getInterestBalance() const;
     EncryptionStatus getEncryptionStatus() const;
 
+    CAmount getActivatedBalance() const;
+    CAmount getLCLBalance() const;
+
     // Check address for validity
     bool validateAddress(const QString &address, bool allowZAddresses=false);
 
@@ -286,12 +289,14 @@ private:
     void subscribeToCoreSignals();
     void unsubscribeFromCoreSignals();
     void checkBalanceChanged();
+    void checkMarmaraBalanceChanged();
 
 Q_SIGNALS:
     // Signal that balance in wallet changed
     void balanceChanged(const CAmount& balance, const CAmount& unconfirmedBalance, const CAmount& immatureBalance,
                         const CAmount& watchOnlyBalance, const CAmount& watchUnconfBalance, const CAmount& watchImmatureBalance,
                         const CAmount& privateBalance, const CAmount& interestBalance);
+    void marmaraBalanceChanged (const CAmount& activatedBalance, const CAmount& LCLBalance);
 
     // Encryption status of wallet changed
     void encryptionStatusChanged(int status);

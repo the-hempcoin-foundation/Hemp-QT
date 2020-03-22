@@ -173,9 +173,60 @@ void WalletModel::pollBalanceChanged()
         cachedNumBlocks = chainActive.Height();
 
         checkBalanceChanged();
+        checkMarmaraBalanceChanged();
+
         if(transactionTableModel)
             transactionTableModel->updateConfirmations();
     }
+}
+
+/* add missing declarations (TODO: refactor this) */
+#include "cc/CCMarmara.h"
+// marmara.cpp
+template <typename IsMarmaraVoutT>
+int64_t AddMarmaraCCInputs(IsMarmaraVoutT IsMarmaraVout, CMutableTransaction &mtx, std::vector<CPubKey> &pubkeys, const char *unspentaddr, CAmount amount, int32_t maxinputs);
+bool IsMarmaraActivatedVout(const CTransaction &tx, int32_t nvout, CPubKey &pk_in_opret, uint256 &dummytxid);
+CAmount MarmaraGetLCLAmount();
+
+CAmount WalletModel::getActivatedBalance() const
+{
+    CPubKey refpk = MarmaraGetMyPubkey();
+    if (refpk.IsValid())
+    {
+        vuint8_t vrefpk(refpk.begin(), refpk.end());
+
+        CPubKey Marmarapk;
+        char activated1of2addr[KOMODO_ADDRESS_BUFSIZE];
+        struct CCcontract_info *cp, C;
+        cp = CCinit(&C, EVAL_MARMARA);
+        Marmarapk = GetUnspendable(cp, 0);
+
+        GetCCaddress1of2(cp, activated1of2addr, Marmarapk, vrefpk);
+
+        CMutableTransaction mtx;
+        std::vector<CPubKey> pubkeys;
+        return AddMarmaraCCInputs(IsMarmaraActivatedVout, mtx, pubkeys, activated1of2addr, 0, MARMARA_VINS);
+    }
+
+    return 0;
+}
+
+CAmount WalletModel::getLCLBalance() const
+{
+    return MarmaraGetLCLAmount();
+}
+
+void WalletModel::checkMarmaraBalanceChanged()
+{
+    // called from pollBalanceChanged, which called when pollTimer acts (every MODEL_UPDATE_DELAY = 250 sec.)
+    // TODO: we should force checkMarmaraBalanceChanged on every block
+
+    CAmount newActivatedBalance = getActivatedBalance();
+    CAmount newLCLBalance = getLCLBalance();
+
+    // use caching?
+
+    Q_EMIT marmaraBalanceChanged(newActivatedBalance, newLCLBalance);
 }
 
 void WalletModel::checkBalanceChanged()

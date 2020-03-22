@@ -2927,7 +2927,6 @@ static void EnumLockedInLoop(T func, const CPubKey &pk)
     }
 }
 
-
 // add marmara special UTXO from activated and lock-in-loop addresses for staking
 // called from PoS code
 void MarmaraGetStakingUtxos(std::vector<struct komodo_staking> &array, int32_t *numkp, int32_t *maxkp, uint8_t *hashbuf, int32_t height)
@@ -4526,6 +4525,29 @@ UniValue MarmaraInfo(const CPubKey &refpk, int32_t firstheight, int32_t lastheig
     }
     return(result);
 }
+
+CAmount MarmaraGetLCLAmount() {
+
+    CPubKey refpk = MarmaraGetMyPubkey();
+    if (refpk.IsValid())
+    {
+        // calc lock-in-loops amount for refpk:
+        CAmount loopAmount = 0;
+        CAmount totalLoopAmount = 0;
+
+        EnumLockedInLoop(
+            [&](char *loopaddr, const CTransaction & tx, int32_t nvout, CBlockIndex *pindex) // call enumerator with callback
+            {
+                totalLoopAmount += tx.vout[nvout].nValue;
+            },
+            refpk
+        );
+
+        return totalLoopAmount;
+    }
+    return 0;
+}
+
 
 // generate a new activated address and return its segid
 UniValue MarmaraNewActivatedAddress(CPubKey pk)
