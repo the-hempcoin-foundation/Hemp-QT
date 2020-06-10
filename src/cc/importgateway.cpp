@@ -263,7 +263,7 @@ int32_t ImportGatewayBindExists(struct CCcontract_info *cp,CPubKey importgateway
     std::vector<uint256> txids;
 
     _GetCCaddress(markeraddr,EVAL_IMPORTGATEWAY,importgatewaypk);
-    SetCCtxids(txids,markeraddr,true,cp->evalcode,zeroid,'B');
+    SetCCtxids(txids,markeraddr,true,cp->evalcode,CC_MARKER_VALUE,zeroid,'B');
     for (std::vector<uint256>::const_iterator it=txids.begin(); it!=txids.end(); it++)
     {
         if ( myGetTransaction(*it,tx,hashBlock) != 0 && (numvouts= tx.vout.size()) > 0 && DecodeImportGatewayOpRet(tx.vout[numvouts-1].scriptPubKey)=='B' )
@@ -284,8 +284,8 @@ int32_t ImportGatewayBindExists(struct CCcontract_info *cp,CPubKey importgateway
     {
         const CTransaction &txmempool = *it;
 
-        if ((numvouts=txmempool.vout.size()) > 0 && DecodeImportGatewayOpRet(tx.vout[numvouts-1].scriptPubKey)=='B')
-            if (DecodeImportGatewayBindOpRet(burnaddr,tx.vout[numvouts-1].scriptPubKey,coin,oracletxid,M,N,pubkeys,taddr,prefix,prefix2,wiftype) == 'B')
+        if ((numvouts=txmempool.vout.size()) > 0 && txmempool.vout[0].nValue==CC_MARKER_VALUE && DecodeImportGatewayOpRet(tx.vout[numvouts-1].scriptPubKey)=='B')
+            if (DecodeImportGatewayBindOpRet(depositaddr,tx.vout[numvouts-1].scriptPubKey,coin,oracletxid,M,N,pubkeys,taddr,prefix,prefix2,wiftype) == 'B')
                 return(1);
     }
 
@@ -545,12 +545,11 @@ std::string ImportGatewayBind(uint64_t txfee,std::string coin,uint256 oracletxid
         return("");
     }
     if ( ImportGatewayBindExists(cp,importgatewaypk,coin) != 0 )
-    {
-        CCerror = strprintf("Gateway bind.%s already exists",coin.c_str());
-        LOGSTREAM("importgateway",CCLOG_INFO, stream << CCerror << std::endl);
-        return("");
-    }
-    if ( AddNormalinputs(mtx,mypk,txfee+CC_MARKER_VALUE,2) > 0 )
+        CCERR_RESULT("importgateway",CCLOG_ERROR, stream << "Gateway bind."<<coin<< " already exists");
+    if ( txfee == 0 )
+        txfee = ASSETCHAINS_CCZEROTXFEE[EVAL_IMPORTGATEWAY]?0:CC_TXFEE;
+    mypk = pk.IsValid()?pk:pubkey2pk(Mypubkey());
+    if ( AddNormalinputs(mtx,mypk,txfee+CC_MARKER_VALUE,2,pk.IsValid()) > 0 )
     {
         mtx.vout.push_back(MakeCC1vout(cp->evalcode,CC_MARKER_VALUE,importgatewaypk));
         return(FinalizeCCTx(0,cp,mtx,mypk,txfee,EncodeImportGatewayBindOpRet('B',coin,oracletxid,M,N,pubkeys,taddr,prefix,prefix2,wiftype)));
@@ -575,8 +574,8 @@ std::string ImportGatewayDeposit(uint64_t txfee,uint256 bindtxid,int32_t height,
     }
     cp = CCinit(&C,EVAL_IMPORTGATEWAY);
     if ( txfee == 0 )
-        txfee = 10000;
-    mypk = pubkey2pk(Mypubkey());
+        txfee = ASSETCHAINS_CCZEROTXFEE[EVAL_IMPORTGATEWAY]?0:CC_TXFEE;
+    mypk = pk.IsValid()?pk:pubkey2pk(Mypubkey());
     if (!E_UNMARSHAL(ParseHex(rawburntx), ss >> burntx))
     {
         return std::string("");
@@ -654,8 +653,8 @@ std::string ImportGatewayWithdraw(uint64_t txfee,uint256 bindtxid,std::string re
     }
     cp = CCinit(&C,EVAL_IMPORTGATEWAY);
     if ( txfee == 0 )
-        txfee = 10000;
-    mypk = pubkey2pk(Mypubkey());
+        txfee = ASSETCHAINS_CCZEROTXFEE[EVAL_IMPORTGATEWAY]?0:CC_TXFEE;
+    mypk = pk.IsValid()?pk:pubkey2pk(Mypubkey());
     importgatewaypk = GetUnspendable(cp, 0);
 
     if( myGetTransaction(bindtxid,tx,hashBlock) == 0 || (numvouts= tx.vout.size()) <= 0 )
@@ -840,7 +839,7 @@ std::string ImportGatewayCompleteSigning(uint64_t txfee,uint256 lasttxid,std::st
     mypk = pubkey2pk(Mypubkey());
     importgatewaypk = GetUnspendable(cp,0);
     if ( txfee == 0 )
-        txfee = 10000;
+        txfee = ASSETCHAINS_CCZEROTXFEE[EVAL_IMPORTGATEWAY]?0:CC_TXFEE;
     if (myGetTransaction(lasttxid,tx,hashBlock)==0 || (numvouts= tx.vout.size())<=0
         || (funcid=DecodeImportGatewayOpRet(tx.vout[numvouts-1].scriptPubKey))==0 || (funcid!='W' && funcid!='P'))
     {
@@ -956,25 +955,11 @@ std::string ImportGatewayMarkDone(uint64_t txfee,uint256 completetxid,std::strin
     cp = CCinit(&C,EVAL_IMPORTGATEWAY);
     mypk = pubkey2pk(Mypubkey());    
     if ( txfee == 0 )
-        txfee = 10000;
-    if (myGetTransaction(completetxid,tx,hashBlock)==0 || (numvouts= tx.vout.size())<=0)
-    {
-        CCerror = strprintf("invalid completesigning txid %s",uint256_str(str,completetxid));
-        LOGSTREAM("importgateway",CCLOG_INFO, stream << CCerror << std::endl);
-        return("");
-    }
-    else if (DecodeImportGatewayCompleteSigningOpRet(tx.vout[numvouts-1].scriptPubKey,withdrawtxid,coin,K,hex)!='S' || refcoin!=coin)
-    {
-        CCerror = strprintf("cannot decode completesigning tx opret %s",uint256_str(str,completetxid));
-        LOGSTREAM("importgateway",CCLOG_INFO, stream << CCerror << std::endl);
-        return("");
-    }
-    if (komodo_txnotarizedconfirmed(completetxid)==false)
-    {
-        CCerror = strprintf("gatewayscompletesigning tx not yet confirmed/notarized");
-        LOGSTREAM("importgateway",CCLOG_INFO, stream << CCerror << std::endl);
-        return("");
-    }
+        txfee = ASSETCHAINS_CCZEROTXFEE[EVAL_IMPORTGATEWAY]?0:CC_TXFEE;
+    if (myGetTransaction(withdrawsigntxid,tx,hashBlock)==0 || (numvouts= tx.vout.size())<=0)
+        CCERR_RESULT("importgateway",CCLOG_ERROR, stream << "invalid withdrawsign txid " << withdrawsigntxid.GetHex());
+    else if (DecodeImportGatewayWithdrawSignOpRet(tx.vout[numvouts-1].scriptPubKey,withdrawtxid,tmplasttxid,signingpubkeys,coin,K,hex)!='S' || refcoin!=coin)
+        CCERR_RESULT("importgateway",CCLOG_ERROR, stream << "cannot decode withdrawsign tx opret " << withdrawsigntxid.GetHex());
     else if (myGetTransaction(withdrawtxid,tx,hashBlock)==0 || (numvouts= tx.vout.size())==0)
     {
         CCerror = strprintf("invalid withdraw txid %s",uint256_str(str,withdrawtxid));
@@ -1176,7 +1161,7 @@ UniValue ImportGatewayList()
     struct CCcontract_info *cp,C; uint256 txid,hashBlock,oracletxid; CTransaction vintx; std::string coin;
     char str[65],burnaddr[64]; uint8_t M,N,taddr,prefix,prefix2,wiftype; std::vector<CPubKey> pubkeys;
     cp = CCinit(&C,EVAL_IMPORTGATEWAY);
-    SetCCtxids(txids,cp->unspendableCCaddr,true,cp->evalcode,zeroid,'B');
+    SetCCtxids(txids,cp->unspendableCCaddr,true,cp->evalcode,CC_MARKER_VALUE,zeroid,'B');
     for (std::vector<uint256>::const_iterator it=txids.begin(); it!=txids.end(); it++)
     {
         txid = *it;

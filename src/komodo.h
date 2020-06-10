@@ -379,7 +379,7 @@ void komodo_stateupdate(int32_t height,uint8_t notarypubs[][33],uint8_t numnotar
                 fseek(fp,0,SEEK_END);
             else
             {
-                LogPrintf("komodo_faststateinit retval.%d\n",retval);
+                //LogPrintf("komodo_faststateinit retval.%d\n",retval);
                 while ( komodo_parsestatefile(sp,fp,symbol,dest) >= 0 )
                     ;
             }

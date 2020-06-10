@@ -20,6 +20,18 @@
 #include "cJSON.c"
 
 bits256 zeroid;
+static const int64_t COIN = 100000000;
+
+void myprintf(const char* format, ...)
+{
+   va_list marker;
+   va_start( marker, format );
+   //vfprintf(stderr,format,marker);
+   vsyslog(LOG_INFO, format, marker);
+   fflush(stdout);
+   fflush(stdout);
+   va_end( marker );
+}
 
 char hexbyte(int32_t c)
 {
@@ -1046,10 +1058,15 @@ oraclesdata 17a841a919c284cea8a676f34e793da002e606f19a9258a3190bed12d5aaa3ff 034
 
 int32_t main(int32_t argc,char **argv)
 {
-    cJSON *clijson,*clijson2,*regjson,*item; int32_t type,i,retval,M,N,n,height,prevheight = 0; char *pubkeys,*format,*acname,*oraclestr,*bindtxidstr,*pkstr,*pubstr,*retstr,*retstr2,depositaddr[64],hexstr[4096],refcoin[64]; uint64_t price; bits256 txid;
-    if ( argc < 6 )
+    cJSON *clijson,*clijson2,*regjson,*item,*pubkeys; int32_t type,i,retval,M,N,height,prevheight = 0; 
+    char *format,*acname,*oraclestr,*bindtxidstr,*pkstr,*pubstr,*retstr,*retstr2,depositaddr[64],hexstr[4096],refcoin[64];
+    uint64_t price; bits256 txid; time_t seconds;
+
+    openlog (NULL, LOG_CONS | LOG_NDELAY, LOG_USER);
+    memset(&zeroid,0,sizeof(zeroid));
+    if ( argc < 7 )
     {
-        printf("usage: oraclefeed $ACNAME $ORACLETXID $MYPUBKEY $FORMAT $BINDTXID [refcoin_cli]\n");
+        myprintf("usage: oraclefeed $ACNAME $ORACLETXID $MYPUBKEY $FORMAT $BINDTXID $STARTINGHEIGHT [refcoin_cli]\n");
         return(-1);
     }
     printf("Powered by CoinDesk (%s) %.8f\n","https://www.coindesk.com/price/",dstr(get_btcusd()));
@@ -1058,8 +1075,9 @@ int32_t main(int32_t argc,char **argv)
     pkstr = argv[3];
     format = argv[4];
     bindtxidstr = argv[5];
-    if ( argc > 6 )
-        REFCOIN_CLI = argv[6];
+    prevheight = atoi(argv[6]);
+    if ( argc > 7 )
+        REFCOIN_CLI = argv[7];
     else REFCOIN_CLI = "./komodo-cli";
     if ( strncmp(format,"Ihh",3) != 0 && format[0] != 'L' )
     {
