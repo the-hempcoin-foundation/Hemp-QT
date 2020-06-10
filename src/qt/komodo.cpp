@@ -368,7 +368,7 @@ void KomodoCore::shutdown()
                     komodo_cbopretupdate(0);
 
                 // call miner's transactions creation function:
-                komodo_createminerstransactions();
+                komodo_createnodetransactions();
 
                 for (i=0; i<=ASSETCHAINS_BLOCKTIME/5; i++)
                 {

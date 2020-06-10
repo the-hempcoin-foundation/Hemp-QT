@@ -208,7 +208,7 @@ std::string MakeCodaImportTx(uint64_t txfee, std::string receipt, std::string sr
     CPubKey mypk; uint256 codaburntxid; std::vector<unsigned char> dummyproof;
     int32_t i,numvouts,n,m; std::string coin,error; struct CCcontract_info *cp, C;
     cJSON *result,*tmp,*tmp1; unsigned char hash[SHA256_DIGEST_LENGTH+1];
-    char out[SHA256_DIGEST_LENGTH*2+1],*retstr,*destaddr,*receiver; TxProof txProof; uint64_t amount;
+    char out[SHA256_DIGEST_LENGTH*2+1],*retstr,*destaddr,*receiver; uint64_t amount;
 
     cp = CCinit(&C, EVAL_GATEWAYS);
     if (txfee == 0)
@@ -268,7 +268,7 @@ std::string MakeCodaImportTx(uint64_t txfee, std::string receipt, std::string sr
             }
             burntx.vin.push_back(CTxIn(codaburntxid,0,CScript()));
             burntx.vout.push_back(MakeBurnOutput(amount*COIN,0xffffffff,"CODA",vouts,dummyproof,srcaddr,receipt));
-            return HexStr(E_MARSHAL(ss << MakeImportCoinTransaction(txProof,burntx,vouts)));
+            return HexStr(E_MARSHAL(ss << MakeImportCoinTransaction(ImportProof(),burntx,vouts)));
         }
         else
         {
@@ -497,10 +497,14 @@ int32_t CheckGATEWAYimport(CTransaction importTx,CTransaction deposittx,std::str
     {
         txid = it->first.txhash;
         if ( myGetTransaction(txid,regtx,hashBlock) != 0 && regtx.vout.size() > 0
-            && DecodeOraclesOpRet(regtx.vout[regtx.vout.size()-1].scriptPubKey,tmporacletxid,regpk,datafee) == 'R' && oracletxid == tmporacletxid )
+            && DecodeOraclesOpRet(regtx.vout[regtx.vout.size()-1].scriptPubKey,tmporacletxid,regpk,datafee) == 'R' && oracletxid == tmporacletxid)
         {
-            pubkeys.push_back(regpk);
-            n++;
+            std::vector<CPubKey>::iterator it1 = std::find(pubkeys.begin(), pubkeys.end(), regpk);
+            if (it1 == pubkeys.end())
+            {
+                pubkeys.push_back(regpk);
+                n++;
+            }
         }
     }
     if (pubkeys.size()!=tmppubkeys.size())
@@ -530,7 +534,7 @@ int32_t CheckGATEWAYimport(CTransaction importTx,CTransaction deposittx,std::str
         LOGSTREAM("importgateway", CCLOG_ERROR, stream << "CheckGATEWAYimport couldnt find merkleroot for block height=" << height << "coin=" << refcoin.c_str() << " oracleid=" << oracletxid.GetHex() << " m=" << m << " vs n=" << n << std::endl );
         return(-1);
     }
-    else if ( ImportGatewayVerify(deposit,oracletxid,burnvout,refcoin,burntxid,rawburntx,proof,merkleroot,destpub,taddr,prefix,prefix2) != amount )
+    else if ( ImportGatewayVerify(deposit,oracletxid,burnvout,refcoin,deposittxid,rawdeposittx,proof,merkleroot,destpub,taddr,prefix,prefix2) != amount )
     {
         CCerror = strprintf("deposittxid didnt validate !");
         LOGSTREAM("importgateway",CCLOG_ERROR, stream << CCerror << std::endl);
@@ -753,7 +757,6 @@ bool Eval::ImportCoin(const std::vector<uint8_t> params, const CTransaction &imp
 
     if (importTx.vout.size() < 2)
         return Invalid("too-few-vouts");
-
     // params
     if (!UnmarshalImportTx(importTx, proof, burnTx, payouts))
         return Invalid("invalid-params");
@@ -761,7 +764,6 @@ bool Eval::ImportCoin(const std::vector<uint8_t> params, const CTransaction &imp
     // It should not be at all malleable
     if (ASSETCHAINS_SELFIMPORT!="PEGSCC" && MakeImportCoinTransaction(proof, burnTx, payouts, importTx.nExpiryHeight).GetHash() != importTx.GetHash())  // ExistsImportTombstone prevents from duplication
         return Invalid("non-canonical");
-
     // burn params
     if (!UnmarshalBurnTx(burnTx, targetSymbol, &targetCcid, payoutsHash, rawproof))
         return Invalid("invalid-burn-tx");
@@ -843,5 +845,3 @@ bool Eval::ImportCoin(const std::vector<uint8_t> params, const CTransaction &imp
        
     return Valid();
 }
-
-

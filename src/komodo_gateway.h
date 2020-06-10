@@ -17,6 +17,9 @@
 #include "komodo_defs.h"
 #include "cc/CCMarmara.h"
 
+#include "cc/CCPrices.h"
+#include "cc/pricesfeed.h"
+
 /*#include "secp256k1/include/secp256k1.h"
 #include "secp256k1/include/secp256k1_schnorrsig.h"
 #include "secp256k1/include/secp256k1_musig.h"
@@ -1719,7 +1722,7 @@ int32_t komodo_pricecmp(int32_t nHeight, char *maxflags, uint32_t *pricebitsA, u
     {
         if ((newprice = komodo_pricenew(&maxflags[i], pricebitsA[i], pricebitsB[i], tolerance)) != 0)
         {
-            LogPrintf("ht.%d i.%d/%d %u vs %u -> newprice.%u out of tolerance maxflag.%d\n",nHeight,i,n,pricebitsB[i],pricebitsA[i],newprice,maxflags[i]);
+            LogPrintf("ht.%d i.%d/%d %u vs %u -> newprice.%u out of tolerance maxflag.%d\n", nHeight, i, end, pricebitsB[i], pricebitsA[i], newprice, maxflags[i]);
             return(-1);
         }
     }
@@ -1738,7 +1741,7 @@ int32_t komodo_priceclamp(uint32_t *pricebits, uint32_t *refprices, int32_t begi
     {
         if ((newprice = komodo_pricenew(&maxflags[i], pricebits[i], refprices[i], tolerance)) != 0)
         {
-            LogPrintf("priceclamped[%d of %d] %u vs %u -> %u\n",i,n,refprices[i],pricebits[i],newprice);
+            LogPrintf("priceclamped[%d of %d] %u vs %u -> %u\n", i, end, refprices[i], pricebits[i], newprice);
             pricebits[i] = newprice;
         }
     }
@@ -2178,18 +2181,19 @@ const char *Techstocks[] =
 { "AAPL","ADBE","ADSK","AKAM","AMD","AMZN","ATVI","BB","CDW","CRM","CSCO","CYBR","DBX","EA","FB","GDDY","GOOG","GRMN","GSAT","HPQ","IBM","INFY","INTC","INTU","JNPR","MSFT","MSI","MU","MXL","NATI","NCR","NFLX","NTAP","NVDA","ORCL","PANW","PYPL","QCOM","RHT","S","SHOP","SNAP","SPOT","SYMC","SYNA","T","TRIP","TWTR","TXN","VMW","VOD","VRSN","VZ","WDC","XRX","YELP","YNDX","ZEN"
 };
 const char *Metals[] = { "XAU", "XAG", "XPT", "XPD", };
-
 const char *Markets[] = { "DJIA", "SPX", "NDX", "VIX" };
 */
 
 cJSON *get_urljson(char *url)
 {
-    char *jsonstr; cJSON *json = 0;
+    char *jsonstr; 
+    cJSON *json = 0;
     if ( (jsonstr= issue_curl(url)) != 0 )
     {
-        //LogPrintf("(%s) -> (%s)\n",url,jsonstr);
+        //fprintf(stderr,"(%s) -> (%s)\n",url,jsonstr);
         json = cJSON_Parse(jsonstr);
-        free(jsonstr);
+        //free(jsonstr);
+        cJSON_free(jsonstr);
     }
     return(json);
 }
@@ -2211,23 +2215,29 @@ extern uint256 Queued_reconsiderblock;
 
 void komodo_cbopretupdate(int32_t forceflag)
 {
-    static uint32_t lasttime,lastbtc,pending;
-    static uint32_t pricebits[4],pricebuf[KOMODO_MAXPRICES],forexprices[sizeof(Forex)/sizeof(*Forex)];
-    int32_t size; uint32_t flags=0,now; CBlockIndex *pindex;
+    static uint32_t /*lasttime,lastbtc,*/pending;
+    static uint32_t pricebits[4], pricebuf[KOMODO_MAXPRICES]; //, forexprices[sizeof(Forex) / sizeof(*Forex)];
+    uint32_t flags=0; 
+    CBlockIndex *pindex;
+    uint32_t now;
+
+    if (ShutdownRequested())
+        return;
+
     if ( Queued_reconsiderblock != zeroid )
     {
         LogPrintf("Queued_reconsiderblock %s\n",Queued_reconsiderblock.GetHex().c_str());
         komodo_reconsiderblock(Queued_reconsiderblock);
         Queued_reconsiderblock = zeroid;
     }
-    if ( forceflag != 0 && pending != 0 )
+    if ( forceflag != 0 && pending != 0 ) 
     {
         while ( pending != 0 )
-            LogPrintf("pricewait "), sleep(1);
-        return;
+            LogPrintf("pricewait "), sleep(1);   // reentrant call is waiting until mineropret is updated
+        return;  
     }
-    pending = 1;
-    now = (uint32_t)time(NULL);
+    pending = 1;  // prevent reentry to the function
+    //now = (uint32_t)time(NULL);
     if ( (ASSETCHAINS_CBOPRET & 1) != 0 )
     {
         //time_t timestamp;
@@ -2246,12 +2256,18 @@ void komodo_cbopretupdate(int32_t forceflag)
 
         if ( flags != 0 )
         {
-            if ( (flags & 1) != 0 )
-                lastbtc = now;
-            if ( (flags & 2) != 0 )
-                lasttime = now;
-            memcpy(Mineropret.data(),PriceCache[0],size);
-            if ( ExtremePrice.dir != 0 && ExtremePrice.ind > 0 && ExtremePrice.ind < size/sizeof(uint32_t) && now < ExtremePrice.timestamp+3600 )
+            uint32_t opretsize = komodo_cbopretsize(ASSETCHAINS_CBOPRET);
+            if (Mineropret.size() < opretsize)
+                Mineropret.resize(opretsize);
+
+//            if ( (flags & 1) != 0 )
+//                lastbtc = now;
+//            if ( (flags & 2) != 0 )
+//               lasttime = now;
+            memcpy(Mineropret.data(), PriceCache[0], opretsize);
+
+            // invalidate block with extreme prices:
+            if ( ExtremePrice.dir != 0 && ExtremePrice.ind > 0 && ExtremePrice.ind < count && now < ExtremePrice.timestamp+3600 )
             {
                 LogPrintf("cmp dir.%d PriceCache[0][ExtremePrice.ind] %u >= %u ExtremePrice.pricebits\n",ExtremePrice.dir,PriceCache[0][ExtremePrice.ind],ExtremePrice.pricebits);
                 if ( (ExtremePrice.dir > 0 && PriceCache[0][ExtremePrice.ind] >= ExtremePrice.pricebits) || (ExtremePrice.dir < 0 && PriceCache[0][ExtremePrice.ind] <= ExtremePrice.pricebits) )
@@ -2270,10 +2286,11 @@ void komodo_cbopretupdate(int32_t forceflag)
             //LogPrintf(" <- set Mineropret[%d] size.%d %ld\n",(int32_t)Mineropret.size(),size,sizeof(PriceCache[0]));
         }
     }
-    pending = 0;
+    pending = 0; // allow entry to the function
 }
 
-int64_t komodo_pricemult(int32_t ind)
+// get multiplier to normalize prices to 100,000,000 decimal order, to make synthetic indexes
+int64_t komodo_pricemult_to10e8(int32_t ind)
 {
     int32_t i,j;
     if ( (ASSETCHAINS_CBOPRET & 1) != 0 && ind < KOMODO_MAXPRICES )
@@ -2303,8 +2320,10 @@ char *komodo_pricename(char *name,int32_t ind)
 // finds index for its symbol name
 int32_t komodo_priceind(const char *symbol)
 {
-    char name[65]; int32_t i,n = (int32_t)(komodo_cbopretsize(ASSETCHAINS_CBOPRET) / sizeof(uint32_t));
-    for (i=1; i<n; i++)
+    char name[PRICES_MAXNAMELENGTH + 1]; 
+    int32_t n = (int32_t)(komodo_cbopretsize(ASSETCHAINS_CBOPRET) / sizeof(uint32_t));
+
+    for (int i=1; i<n; i++)
     {
         komodo_pricename(name,i);
         if ( strcmp(name,symbol) == 0 )
@@ -2318,7 +2337,7 @@ int64_t komodo_pricecorrelated(uint64_t seed,int32_t ind,uint32_t *rawprices,int
     int32_t i,j,k,n,iter,correlation,maxcorrelation=0; int64_t firstprice,price,sum,den,mult,refprice,lowprice,highprice;
     if ( PRICES_DAYWINDOW < 2 || ind >= KOMODO_MAXPRICES )
         return(-1);
-    mult = komodo_pricemult(ind);
+    mult = komodo_pricemult_to10e8(ind);
     if ( nonzprices != 0 )
         memset(nonzprices,0,sizeof(*nonzprices)*PRICES_DAYWINDOW);
     //for (i=0; i<PRICES_DAYWINDOW; i++)

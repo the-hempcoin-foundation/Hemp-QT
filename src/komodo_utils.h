@@ -12,7 +12,8 @@
  * Removal or modification of this copyright notice is prohibited.            *
  *                                                                            *
  ******************************************************************************/
-#include <sys/time.h>
+#ifndef __KOMODO_UTIL_H__
+#define __KOMODO_UTIL_H__
 
 #include "komodo_defs.h"
 #include "key_io.h"
@@ -24,6 +25,8 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/thread.hpp>
 #endif
+
+#include "cc/pricesfeed.h"
 
 #define SATOSHIDEN ((uint64_t)100000000L)
 #define dstr(x) ((double)(x) / SATOSHIDEN)
@@ -1925,17 +1928,21 @@ void komodo_args(char *argv0)
         //fprintf(stderr,"ASSETCHAINS_CBOPRET.%llx\n",(long long)ASSETCHAINS_CBOPRET);
         if ( ASSETCHAINS_CBOPRET != 0 )
         {
-            SplitStr(GetArg("-ac_prices",""),  ASSETCHAINS_PRICES);
-            if ( ASSETCHAINS_PRICES.size() > 0 )
+            std::vector<std::string> ac_forex = { "BGN", "NZD", "ILS", "RUB", "CAD", "PHP", "CHF", "AUD", "JPY", "TRY", "HKD", "MYR", "HRK", "CZK", "IDR", "DKK", "NOK", "HUF", "GBP", "MXN", "THB", "ISK", "ZAR", "BRL", "SGD", "PLN", "INR", "KRW", "RON", "CNY", "SEK", "EUR" };
+            std::vector<std::string> ac_prices;
+            std::vector<std::string> ac_stocks;
+
+            SplitStr(GetArg("-ac_prices", ""), ac_prices);
+            if (ac_prices.size() > 0)
                 ASSETCHAINS_CBOPRET |= 4;
-            SplitStr(GetArg("-ac_stocks",""),  ASSETCHAINS_STOCKS);
-            if ( ASSETCHAINS_STOCKS.size() > 0 )
+            SplitStr(GetArg("-ac_stocks", ""), ac_stocks);
+            if (ac_stocks.size() > 0)
                 ASSETCHAINS_CBOPRET |= 8;
             for (i = 0; i < ac_prices.size(); i ++)
                 fprintf(stderr, "%s ", ac_prices[i].c_str());
             LogPrintf("%d -ac_prices\n", (int32_t)ac_prices.size());
             for (i = 0; i < ac_stocks.size(); i ++)
-                LogPrintf("%s ", ac_stocks[i].c_str());
+                fprintf(stderr, "%s ", ac_stocks[i].c_str());
             LogPrintf("%d -ac_stocks\n", (int32_t)ac_stocks.size());
 
             // parsing -ac_feeds config
@@ -1948,7 +1955,7 @@ void komodo_args(char *argv0)
                 cJSON *jfeedcfg = cJSON_Parse(sfeedcfg.c_str());
                 if (jfeedcfg) {
                     parsed = PricesFeedParseConfig(jfeedcfg);
-                    fprintf(stderr,"prices feed (%s)\n",jprint(jfeedcfg,0));
+                    LogPrintf("prices feed (%s)\n",jprint(jfeedcfg,0));
                     cJSON_Delete(jfeedcfg);
                 }
                 else
@@ -2057,7 +2064,7 @@ void komodo_args(char *argv0)
         {
             if (ASSETCHAINS_BEAMPORT == 0)
             {
-                fprintf(stderr,"missing -ac_beam for BEAM rpcport\n");
+                LogPrintf("missing -ac_beam for BEAM rpcport\n");
                 StartShutdown();
             }
         }
@@ -2065,7 +2072,7 @@ void komodo_args(char *argv0)
         {
             if (ASSETCHAINS_CODAPORT == 0)
             {
-                fprintf(stderr,"missing -ac_coda for CODA rpcport\n");
+                LogPrintf("missing -ac_coda for CODA rpcport\n");
                 StartShutdown();
             }
         }
@@ -2074,7 +2081,7 @@ void komodo_args(char *argv0)
             Split(GetArg("-ac_pegsccparams",""), sizeof(ASSETCHAINS_PEGSCCPARAMS)/sizeof(*ASSETCHAINS_PEGSCCPARAMS), ASSETCHAINS_PEGSCCPARAMS, 0);
             if (ASSETCHAINS_ENDSUBSIDY[0]!=1 || ASSETCHAINS_COMMISSION!=0)
             {
-                fprintf(stderr,"when using import for pegsCC these must be set: -ac_end=1 -ac_perc=0\n");
+                LogPrintf("when using import for pegsCC these must be set: -ac_end=1 -ac_perc=0\n");
                 StartShutdown();
             }
         }
@@ -2267,27 +2274,21 @@ LogPrintf("extralen.%d before disable bits\n",extralen);
             if ( ASSETCHAINS_CBOPRET != 0 )
             {
                 extralen += iguana_rwnum(1,&extraptr[extralen],sizeof(ASSETCHAINS_CBOPRET),(void *)&ASSETCHAINS_CBOPRET);
-                if ( ASSETCHAINS_PRICES.size() != 0 )
-                {
-                    for (i=0; i<ASSETCHAINS_PRICES.size(); i++)
-                    {
-                        symbol = ASSETCHAINS_PRICES[i];
-                        memcpy(&extraptr[extralen],(char *)symbol.c_str(),symbol.size());
-                        extralen += symbol.size();
+                if (PricesFeedSymbolsCount() > 0) {
+                    // add price names params for magic calc:
+                    std::string feednames;
+
+                    // if 7 or 15 provide magic compatibility with old prices which includes only -ac_prices and -ac_stocks into magic:
+                    bool oldPricesCompatible = ASSETCHAINS_CBOPRET == 7 || ASSETCHAINS_CBOPRET == 15 ? true : false;
+                    PricesFeedSymbolsForMagic(feednames, oldPricesCompatible);
+                    assert(extralen + feednames.length() < sizeof(extrabuf) / sizeof(extrabuf[0]));
+                    memcpy(&extraptr[extralen], feednames.c_str(), feednames.length());
+                    extralen += feednames.length();
                     }
-                }
-                if ( ASSETCHAINS_STOCKS.size() != 0 )
-                {
-                    for (i=0; i<ASSETCHAINS_STOCKS.size(); i++)
-                    {
-                        symbol = ASSETCHAINS_STOCKS[i];
-                        memcpy(&extraptr[extralen],(char *)symbol.c_str(),symbol.size());
-                        extralen += symbol.size();
-                    }
-                }
+
                 //komodo_pricesinit();
                 komodo_cbopretupdate(1); // will set Mineropret
-                LogPrintf("This blockchain uses data produced from CoinDesk Bitcoin Price Index\n");
+                LogPrintf("This blockchain uses data produced from CoinDesk Bitcoin Price Index\n");  // print CoinDesk disclaimer
             }
             if ( ASSETCHAINS_NK[0] != 0 && ASSETCHAINS_NK[1] != 0 )
             {
@@ -2584,3 +2585,5 @@ void komodo_prefetch(FILE *fp)
     fseek(fp,fpos,SEEK_SET);
 }
 */
+
+#endif // #ifndef __KOMODO_UTIL_H__

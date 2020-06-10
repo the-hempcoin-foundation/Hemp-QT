@@ -1727,6 +1727,7 @@ UniValue ListReceived(const UniValue& params, bool fByAccounts)
         else
         {
             UniValue obj(UniValue::VOBJ);
+
             if(fIsWatchonly)
                 obj.push_back(Pair("involvesWatchonly", true));
             obj.push_back(Pair("address",       EncodeDestination(dest)));
@@ -6725,42 +6726,22 @@ UniValue gatewayswithdraw(const UniValue& params, bool fHelp, const CPubKey& myp
     {
         result.push_back(Pair("result", "success"));
     }
-    Lock2NSPV(mypk);
-    return(result);
-}
-
-UniValue gatewayspartialsign(const UniValue& params, bool fHelp, const CPubKey& mypk)
-{
-    UniValue result(UniValue::VOBJ); std::string coin,parthex; uint256 txid;
-    if ( fHelp || params.size() != 3 )
-        throw runtime_error("gatewayspartialsign txidaddr refcoin hex\n");
-    if ( ensure_CCrequirements(EVAL_GATEWAYS) < 0 )
-        throw runtime_error(CC_REQUIREMENTS_MSG);
-    Lock2NSPV(mypk);
-    txid = Parseuint256((char *)params[0].get_str().c_str());
-    coin = params[1].get_str();
-    parthex = params[2].get_str();
-    result = GatewaysPartialSign(mypk,0,txid,coin,parthex);
-    if ( result[JSON_HEXTX].getValStr().size() > 0  )
-    {
-        result.push_back(Pair("result", "success"));
-    }
     Unlock2NSPV(mypk);
     return(result);
 }
 
-UniValue gatewayscompletesigning(const UniValue& params, bool fHelp, const CPubKey& mypk)
+UniValue gatewayswithdrawsign(const UniValue& params, bool fHelp, const CPubKey& mypk)
 {
     UniValue result(UniValue::VOBJ); uint256 withdrawtxid; std::string txhex,coin;
     if ( fHelp || params.size() != 3 )
-        throw runtime_error("gatewayscompletesigning withdrawtxid coin hex\n");
+        throw runtime_error("gatewayswithdrawsign withdrawtxid coin hex\n");
     if ( ensure_CCrequirements(EVAL_GATEWAYS) < 0 )
         throw runtime_error(CC_REQUIREMENTS_MSG);
     Lock2NSPV(mypk);
     withdrawtxid = Parseuint256((char *)params[0].get_str().c_str());
     coin = params[1].get_str();
     txhex = params[2].get_str();
-    result = GatewaysCompleteSigning(mypk,0,withdrawtxid,coin,txhex);
+    result = GatewaysWithdrawSign(mypk,0,withdrawtxid,coin,txhex);
     if ( result[JSON_HEXTX].getValStr().size() > 0  )
     {
         result.push_back(Pair("result", "success"));
@@ -6799,28 +6780,28 @@ UniValue gatewayspendingdeposits(const UniValue& params, bool fHelp, const CPubK
     return(GatewaysPendingDeposits(mypk,bindtxid,coin));
 }
 
-UniValue gatewayspendingwithdraws(const UniValue& params, bool fHelp, const CPubKey& mypk)
+UniValue gatewayspendingsignwithdraws(const UniValue& params, bool fHelp, const CPubKey& mypk)
 {
     uint256 bindtxid; std::string coin;
     if ( fHelp || params.size() != 2 )
-        throw runtime_error("gatewayspendingwithdraws bindtxid coin\n");
+        throw runtime_error("gatewayspendingsignwithdraws bindtxid coin\n");
     if ( ensure_CCrequirements(EVAL_GATEWAYS) < 0 )
         throw runtime_error(CC_REQUIREMENTS_MSG);
     bindtxid = Parseuint256((char *)params[0].get_str().c_str());
     coin = params[1].get_str();
-    return(GatewaysPendingWithdraws(mypk,bindtxid,coin));
+    return(GatewaysPendingSignWithdraws(mypk,bindtxid,coin));
 }
 
-UniValue gatewaysprocessed(const UniValue& params, bool fHelp, const CPubKey& mypk)
+UniValue gatewayssignedwithdraws(const UniValue& params, bool fHelp, const CPubKey& mypk)
 {
     uint256 bindtxid; std::string coin;
     if ( fHelp || params.size() != 2 )
-        throw runtime_error("gatewaysprocessed bindtxid coin\n");
+        throw runtime_error("gatewayssignedwithdraws bindtxid coin\n");
     if ( ensure_CCrequirements(EVAL_GATEWAYS) < 0 )
         throw runtime_error(CC_REQUIREMENTS_MSG);
     bindtxid = Parseuint256((char *)params[0].get_str().c_str());
     coin = params[1].get_str();
-    return(GatewaysProcessedWithdraws(mypk,bindtxid,coin));
+    return(GatewaysSignedWithdraws(mypk,bindtxid,coin));
 }
 
 UniValue oracleslist(const UniValue& params, bool fHelp, const CPubKey& mypk)

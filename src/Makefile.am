@@ -523,6 +523,7 @@ libbitcoin_common_a_SOURCES = \
   cc/CCtokenutils.cpp \
   cc/old/CCtokenutils_v0.cpp \
   cc/CCutilbits.cpp \
+  gmp_i64.cpp \
   $(BITCOIN_CORE_H) \
   $(LIBZCASH_H)
 

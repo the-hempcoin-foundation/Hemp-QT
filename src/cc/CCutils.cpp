@@ -639,6 +639,24 @@ uint256 CCOraclesReverseScan(char const *logcategory,uint256 &txid,int32_t heigh
     return(zeroid);
 }
 
+int64_t CCOraclesGetDepositBalance(char const *logcategory,uint256 reforacletxid,uint256 batontxid)
+{
+    CTransaction tx; uint256 hash,prevbatontxid,hashBlock,oracletxid; int32_t len,len2,numvouts;
+    int64_t val,balance=0; CPubKey pk; std::vector<uint8_t>data;
+
+    if ( myGetTransaction(batontxid,tx,hashBlock) != 0 && (numvouts= tx.vout.size()) > 0 )
+    {
+        if ( DecodeOraclesData(tx.vout[numvouts-1].scriptPubKey,oracletxid,prevbatontxid,pk,data) == 'D' && oracletxid == reforacletxid )
+        {
+            if ( oracle_format(&hash,&balance,0,'L',(uint8_t *)data.data(),(int32_t)(sizeof(int32_t)+sizeof(uint256)*2),(int32_t)data.size()) == (int32_t)(sizeof(int32_t)+sizeof(uint256)*2+sizeof(int64_t)))
+            {
+                return (balance);
+            }
+        }
+    }
+    return (0);
+}
+
 int32_t NSPV_coinaddr_inmempool(char const *logcategory,char *coinaddr,uint8_t CCflag);
 
 int32_t myIs_coinaddr_inmempoolvout(char const *logcategory,uint256 txid,char *coinaddr)
@@ -745,6 +763,18 @@ uint256 BitcoinGetProofMerkleRoot(const std::vector<uint8_t> &proofData, std::ve
     if (!E_UNMARSHAL(proofData, ss >> merkleBlock))
         return uint256();
     return merkleBlock.txn.ExtractMatches(txids);
+}
+
+int64_t komodo_get_blocktime(uint256 hashBlock)
+{
+    BlockMap::iterator mi = mapBlockIndex.find(hashBlock);
+    if (mi != mapBlockIndex.end() && (*mi).second)
+    {
+        CBlockIndex* pindex = (*mi).second;
+        if (chainActive.Contains(pindex))
+            return pindex->GetBlockTime();
+    }
+    return 0;
 }
 
 extern struct NSPV_inforesp NSPV_inforesult;
