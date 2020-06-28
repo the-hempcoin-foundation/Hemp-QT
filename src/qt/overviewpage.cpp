@@ -181,7 +181,7 @@ void OverviewPage::setMarmaraBalance(const CAmount& activatedBalance, const CAmo
 
     std::string pubkey_short = HexStr(MarmaraGetMyPubkey());
     const size_t nMaxPubkeySymbols = 16 - 4;
-    pubkey_short = pubkey_short.substr(0, nMaxPubkeySymbols) + "..." + pubkey_short.substr(pubkey_short.size() - 1 - nMaxPubkeySymbols, nMaxPubkeySymbols);
+    pubkey_short = pubkey_short.substr(0, nMaxPubkeySymbols) + "..." + pubkey_short.substr(pubkey_short.size() - nMaxPubkeySymbols, nMaxPubkeySymbols);
     ui->labelPubkey->setText(QString::fromStdString(pubkey_short));
 }
 
