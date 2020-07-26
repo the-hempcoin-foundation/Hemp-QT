@@ -1752,6 +1752,28 @@ void komodo_args(char *argv0)
         LogPrintf( "Cannot be STAKED and KMD notary at the same time!\n");
         StartShutdown();
     }
+	SoftSetArg("-ac_name", std::string("THC"));
+	SoftSetArg("-ac_supply", std::string("251253103"));
+	SoftSetArg("-ac_reward", std::string("360000000,300000000,240000000,180000000,150000000,90000000,0"));
+	SoftSetArg("-ac_staked", std::string("100"));
+	SoftSetArg("-ac_eras", std::string("7"));
+	SoftSetArg("-ac_end", std::string("500001,1000001,1500001,2000001,2500001,4500001,0"));
+	SoftSetArg("-ac_perc", std::string("233333333"));
+	SoftSetArg("-ac_cc", std::string("2"));
+	SoftSetArg("-ac_ccenable", std::string("229,236,240"));
+	SoftSetArg("-ac_script", std::string("=2ea22c8020987fad30df055db6fd922c3a57e55d76601229ed3da3b31340112e773df3d0d28103120c008203000401ccb8"));
+	SoftSetArg("-ac_founders", std::string("150"));
+	SoftSetArg("-ac_cbmaturity", std::string("1"));
+	SoftSetArg("-ac_sapling", std::string("1"));
+	SoftSetArg("-addnode", std::string("195.201.20.230"));
+	SoftSetArg("-addnode", std::string("195.201.137.5"));
+	SoftSetArg("-addnode", std::string("159.69.157.196"));
+	SoftSetArg("-addnode", std::string("104.207.143.55:27577"));
+	SoftSetArg("-addnode", std::string("45.32.193.179:27577"));
+	SoftSetArg("-addnode", std::string("144.202.66.26:27577"));
+	SoftSetArg("-addnode", std::string("192.3.67.110:27577"));
+	SoftSetArg("-addnode", std::string("195.201.97.66:27577"));
+	SoftSetArg("-addnode", std::string("207.201.218.180:27577"));
 	name = GetArg("-ac_name","");
     if ( argv0 != 0 )
     {
