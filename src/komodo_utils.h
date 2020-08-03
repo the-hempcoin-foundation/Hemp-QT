@@ -1753,6 +1753,10 @@ void komodo_args(char *argv0)
         StartShutdown();
     }
 	SoftSetArg("-ac_name", std::string("THC"));
+	SoftSetArg("-ac_supply", std::string("251253103"));
+	SoftSetArg("-ac_reward", std::string("360000000,300000000,240000000,180000000,150000000,90000000,0"));
+	SoftSetArg("-ac_staked", std::string("100"));
+
 	name = GetArg("-ac_name","");
     if ( argv0 != 0 )
     {
